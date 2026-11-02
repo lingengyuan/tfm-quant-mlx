@@ -16,6 +16,7 @@
 - KV 末层：第 19 层留 fp16，`affine4` 从 +0.52% 降到 **−0.36%**（137 MB，2.88×）；`turbo3_mse` 从 +2.71% 降到 +0.69%（95 MB，4.14×）。逐头误差分散，无单头主导。
 - 组合：`mix_l18_19_8 + affine4_l19fp16` 的 pinball +0.82%，权重 227 MB、KV 137 MB、峰值 1755 MB（fp32 2774 MB）。
 - 多变量（ETT 7 通道同批）：fp32 pinball 0.1152，优于单变量 0.1168；KV 压缩损失放大约 6 倍，主要来自 variate attention；seq 用 `affine4`、var 用 `affine8` 后为 +1.15%（2418 MB，2.29×）。
+- 协变量：去掉协变量 pinball +4.98%；带上协变量后 int8 +0.35%、int4 +17.2%、mix −0.87%；KV `affine4` +3.55%，seq/var 混合 −0.91%。
 - 量化不提速：模型层 GEMM 只有 482 token，int4 反而慢 9%；端到端差异 ≤9%。4-bit 的收益在显存（2774 → 1717 MB），不在吞吐。
 - 基准对齐：MLX fp32 与 PyTorch 后端在 4 个 ETT 的 56 条序列上平均归一化偏差 0.0013、最大 0.0166，pinball 差 −0.001%（ctx 15,360）。
 
@@ -180,6 +181,28 @@ var 从 affine8 提到 fp16 只多回收 0.23 pp，KV 却从 2418 增到 3628 MB
 
 完整表：[`results/multi_report.md`](results/multi_report.md)、[`results/uni_control_report.md`](results/uni_control_report.md)、[`results/multi_scope_report.md`](results/multi_scope_report.md)、[`results/multi_kv_mixed_report.md`](results/multi_kv_mixed_report.md)。
 
+### 协变量输入（上下文 15,360）
+
+目标取每个 ETT 表的最后一个通道，其余 6 个通道作为 past-only 协变量，2 个 sin/cos 日历特征作为 past-future 协变量。4 个 ETT、每条 6 个窗口，共 24 条目标序列。
+
+| 配置 | pinball | Δpinball | ΔnMAE | cross % | KV MB | reduction |
+|---|---|---|---|---|---|---|
+| fp32 无协变量 | 0.0969 | +4.982% | +5.917% | 0.07% | — | — |
+| fp32 | 0.0923 | — | — | 0.08% | — | — |
+| int8_g64 | 0.0926 | +0.349% | +0.228% | 0.17% | — | — |
+| int4_g64 | 0.1081 | +17.150% | +13.254% | 21.92% | — | — |
+| mix_l18_19_8 | 0.0915 | −0.872% | −1.708% | 0.21% | — | — |
+| affine4 | 0.0956 | +3.550% | +3.652% | 5.69% | 2221 | 3.20× |
+| affine4_seq_var8 | 0.0914 | −0.914% | −1.453% | 0.11% | 3109 | 2.29× |
+| affine4_l19fp16 | 0.0906 | −1.794% | −3.008% | 0.07% | 2465 | 2.88× |
+
+- 协变量本身是主要收益：去掉它们 pinball +4.98%。
+- int4 在协变量下损失更大（+17.15%）；`mix_l18_19_8` 为 −0.87%。
+- KV `affine4` 在 9 个 variate 下 +3.55%；seq/var 混合与第 19 层 fp16 分别回到 −0.91% 和 −1.79%。
+- 24 条目标序列，幅度小于 2% 的负值不应外推。
+
+完整表见 [`results/covariates.md`](results/covariates.md)。
+
 ## 使用
 
 ### 安装
@@ -230,6 +253,7 @@ done
   --out results/kv_sensitivity_turbo3.json --md results/kv_sensitivity_turbo3.md
 .venv/bin/tfmq profile
 .venv/bin/tfmq parity  # 需要 torch：uv pip install -e ".[parity]"
+.venv/bin/tfmq covariates
 ```
 
 完整网格在 M5 / 32 GB 上约 20–25 分钟。
@@ -247,6 +271,7 @@ done
 
 - 数据：ETT-small（ETTh1/ETTh2/ETTm1/ETTm2，每表 7 个通道）加 8 条确定性合成序列。
 - 窗口：每条序列用最后 `context` 个点预测未来 64 点；多变量模式下同一时刻的 7 个通道一起 decode。
+- 协变量：最后一个通道为目标，其余通道为 past-only，sin/cos 日历特征为 past-future。
 - `nMAE`、`pinball` 按每条窗口上下文标准差归一化；`Δ` 为相对同窗口 fp32 的变化。
 - `cov err` 为 9 个十分位覆盖率与名义值之差的平均；`cross %` 为排序前的相邻十分位逆序比例。
 - `KV MB` 按张量形状和比特数计算，`reduction` 相对 fp16 K/V；`peak MB` 为 MLX 峰值显存，含常驻权重。
@@ -281,6 +306,7 @@ src/tfmlab/
   kv_sensitivity.py  KV 逐层/逐头敏感度
   profile.py         GEMM 与端到端性能剖析
   parity.py          与 PyTorch 后端的数值对齐
+  covariates.py      协变量输入下的量化与 KV
   attention.py       注意力补丁
   runtime.py         加载、推理、计时、显存
   metrics.py         点预测与分位数指标
@@ -298,7 +324,8 @@ tests/
 - 权重 `fp16/bf16` 在部分算子中自动升到 fp32（RoPE、running stats），算力收益小于体积收益。
 - KV 压缩没有融合 kernel，解码开销计入吞吐；峰值显存下降需要自定义 Metal kernel。
 - KV 敏感度只覆盖 ETTh1 + synthetic 的 60 个窗口。第 19 层的结论在两种压缩模式下一致；混合 KV 的 −0.36% 幅度小于 1%，不应外推。
-- 多变量只测 ETT 的 7 通道同批；未覆盖变量数变化、变量子集和协变量输入。
+- 多变量只测 ETT 的 7 通道同批；未覆盖变量数变化和变量子集。
+- 协变量只测 24 条目标序列；past-only 用其他 ETT 通道，past-future 用日历特征，未覆盖真实外生变量。
 - PyTorch 对照只在 CPU 上跑，未验证 MPS 路径。
 - TimesFM 3.0 权重使用 non-commercial 许可证，本仓库不重新分发权重。
 

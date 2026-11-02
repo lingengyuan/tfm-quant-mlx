@@ -1,0 +1,100 @@
+{
+  "created": "2026-11-02T16:55:55+0800",
+  "config": {
+    "checkpoint": "models/timesfm-3.0",
+    "data_dir": "data/raw",
+    "datasets": [
+      "ETTh1",
+      "ETTh2",
+      "ETTm1",
+      "ETTm2"
+    ],
+    "context": 15360,
+    "horizon": 64,
+    "windows": 6,
+    "batch": 8,
+    "out": "results/covariates.json",
+    "md": "results/covariates.md"
+  },
+  "series": 24,
+  "past_only": 6,
+  "past_future": 2,
+  "baseline": {
+    "pinball": 0.09229154139757156,
+    "nmae": 0.2360040694475174
+  },
+  "runs": [
+    {
+      "name": "fp32 \u65e0\u534f\u53d8\u91cf",
+      "pinball": 0.09688911586999893,
+      "pinball_delta_pct": 4.981577296040634,
+      "nmae_delta_pct": 5.917098566640348,
+      "crossing_rate": 0.0006510416666666666,
+      "kv_logical_bytes": null,
+      "kv_fp16_bytes": null
+    },
+    {
+      "name": "fp32",
+      "pinball": 0.09229154139757156,
+      "pinball_delta_pct": 0.0,
+      "nmae_delta_pct": 0.0,
+      "crossing_rate": 0.0008138020833333334,
+      "kv_logical_bytes": null,
+      "kv_fp16_bytes": null
+    },
+    {
+      "name": "int8_g64",
+      "pinball": 0.092614084482193,
+      "pinball_delta_pct": 0.3494828233846319,
+      "nmae_delta_pct": 0.22797752110198502,
+      "crossing_rate": 0.001708984375,
+      "kv_logical_bytes": null,
+      "kv_fp16_bytes": null
+    },
+    {
+      "name": "int4_g64",
+      "pinball": 0.10811924934387207,
+      "pinball_delta_pct": 17.14968425775688,
+      "nmae_delta_pct": 13.254461668528753,
+      "crossing_rate": 0.21923828125,
+      "kv_logical_bytes": null,
+      "kv_fp16_bytes": null
+    },
+    {
+      "name": "mix_l18_19_8",
+      "pinball": 0.09148668497800827,
+      "pinball_delta_pct": -0.8720803741874349,
+      "nmae_delta_pct": -1.7077320223905028,
+      "crossing_rate": 0.0021158854166666665,
+      "kv_logical_bytes": null,
+      "kv_fp16_bytes": null
+    },
+    {
+      "name": "affine4",
+      "pinball": 0.09556826949119568,
+      "pinball_delta_pct": 3.5504099769107706,
+      "nmae_delta_pct": 3.6517317723583806,
+      "crossing_rate": 0.056884765625,
+      "kv_logical_bytes": 2221056000,
+      "kv_fp16_bytes": 7107379200
+    },
+    {
+      "name": "affine4_seq_var8",
+      "pinball": 0.09144821763038635,
+      "pinball_delta_pct": -0.9137606268296666,
+      "nmae_delta_pct": -1.452825536614079,
+      "crossing_rate": 0.0010579427083333333,
+      "kv_logical_bytes": 3109478400,
+      "kv_fp16_bytes": 7107379200
+    },
+    {
+      "name": "affine4_l19fp16",
+      "pinball": 0.09063543379306793,
+      "pinball_delta_pct": -1.794430539814571,
+      "nmae_delta_pct": -3.008378917367225,
+      "crossing_rate": 0.000732421875,
+      "kv_logical_bytes": 2465372160,
+      "kv_fp16_bytes": 7107379200
+    }
+  ]
+}

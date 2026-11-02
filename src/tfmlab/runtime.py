@@ -51,6 +51,33 @@ def predict(model, contexts: np.ndarray, horizon: int, batch_size: int) -> np.nd
     return np.concatenate(outputs, axis=0)
 
 
+def predict_with_covariates(
+    model,
+    contexts: np.ndarray,
+    past_only: np.ndarray,
+    past_future: np.ndarray,
+    horizon: int,
+    batch_size: int,
+) -> np.ndarray:
+    """Decode one target variate with past-only and past-future covariates.
+
+    Returns ``(N, horizon, 9)`` for the target only.
+    """
+    outputs = []
+    for start in range(0, len(contexts), batch_size):
+        stop = start + batch_size
+        target = mx.array(np.asarray(contexts[start:stop], dtype=np.float32))[:, None, :]
+        out = model.decode(
+            target,
+            horizon,
+            past_only_covariates=mx.array(np.asarray(past_only[start:stop], dtype=np.float32)),
+            past_future_covariates=mx.array(np.asarray(past_future[start:stop], dtype=np.float32)),
+        )
+        mx.eval(out)
+        outputs.append(np.array(out)[:, 0])
+    return np.concatenate(outputs, axis=0)
+
+
 def _input(batch: int, context: int, variates: int = 1) -> mx.array:
     base = np.sin(np.linspace(0.0, 40.0, context, dtype=np.float32))
     ramp = np.linspace(-1.0, 1.0, context, dtype=np.float32)

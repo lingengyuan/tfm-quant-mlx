@@ -134,6 +134,23 @@ def _cmd_parity(args) -> int:
     return 0
 
 
+def _cmd_covariates(args) -> int:
+    from .covariates import CovariateConfig, run as run_covariates
+
+    run_covariates(
+        CovariateConfig(
+            checkpoint=args.checkpoint,
+            datasets=tuple(args.datasets.split(",")),
+            context=args.context,
+            windows=args.windows,
+            batch=args.batch,
+            out=args.out,
+            md=args.md,
+        )
+    )
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="tfmq")
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -190,6 +207,16 @@ def main(argv: list[str] | None = None) -> int:
     par_p.add_argument("--device", default="cpu")
     par_p.add_argument("--out", default="results/parity.json")
     par_p.set_defaults(func=_cmd_parity)
+
+    cov_p = sub.add_parser("covariates", help="quantization and KV with covariates")
+    cov_p.add_argument("--checkpoint", default="models/timesfm-3.0")
+    cov_p.add_argument("--datasets", default="ETTh1,ETTh2,ETTm1,ETTm2", help="comma separated")
+    cov_p.add_argument("--context", type=int, default=15360)
+    cov_p.add_argument("--windows", type=int, default=2)
+    cov_p.add_argument("--batch", type=int, default=8)
+    cov_p.add_argument("--out", default="results/covariates.json")
+    cov_p.add_argument("--md", default="results/covariates.md")
+    cov_p.set_defaults(func=_cmd_covariates)
 
     args = parser.parse_args(argv)
     return args.func(args)

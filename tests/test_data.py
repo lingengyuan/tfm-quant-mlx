@@ -1,6 +1,12 @@
 import numpy as np
 
-from tfmlab.data import build_multi_windows, build_windows, eval_windows, synthetic_set
+from tfmlab.data import (
+    build_covariate_windows,
+    build_multi_windows,
+    build_windows,
+    eval_windows,
+    synthetic_set,
+)
 
 
 def test_window_shapes_and_targets():
@@ -44,4 +50,16 @@ def test_multi_windows_keep_variates_together():
     assert contexts.shape == (2, len(channels), 512)
     assert targets.shape == (2, len(channels), 64)
     assert scales.shape == (2, len(channels))
+    assert (scales > 0).all()
+
+
+def test_covariate_windows_split_target_and_covariates():
+    series_set = synthetic_set(length=4000)
+    out = build_covariate_windows(series_set, 512, 64, 2)
+    assert out is not None
+    contexts, targets, scales, past_only, past_future = out
+    assert contexts.shape == (2, 512)
+    assert targets.shape == (2, 64)
+    assert past_only.shape == (2, len(series_set) - 1, 512)
+    assert past_future.shape == (2, 2, 512 + 64)
     assert (scales > 0).all()

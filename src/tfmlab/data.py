@@ -187,6 +187,58 @@ def build_multi_windows(
     )
 
 
+def build_covariate_windows(
+    series_set: SeriesSet,
+    context: int,
+    horizon: int,
+    num_windows: int,
+    target_channel: int = -1,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray] | None:
+    """Target is one channel; the others are past-only covariates.
+
+    Two sin/cos calendar features over the window's absolute index serve as
+    past-future covariates. Returns ``(contexts, targets, scales, past_only,
+    past_future)`` with shapes ``(N, C)``, ``(N, H)``, ``(N,)``, ``(N, V, C)``
+    and ``(N, 2, C + H)``.
+    """
+    min_len = context + horizon
+    usable = [i for i, s in enumerate(series_set.series) if len(s) >= min_len]
+    if len(usable) < 2:
+        return None
+    target = usable[target_channel]
+    covariates = [i for i in usable if i != target]
+    length = min(len(series_set.series[i]) for i in usable)
+    first_end = context
+    last_end = length - horizon
+    count = max(1, min(num_windows, (last_end - first_end) // max(1, horizon) + 1))
+    ends = np.linspace(first_end, last_end, count).astype(int)
+    period = {"1h": 24.0, "15min": 96.0}.get(series_set.freq, 24.0)
+
+    contexts, targets, scales, past_only, past_future = [], [], [], [], []
+    for end in ends:
+        ctx = series_set.series[target][end - context : end]
+        tgt = series_set.series[target][end : end + horizon]
+        if not np.isfinite(ctx).all() or not np.isfinite(tgt).all():
+            continue
+        contexts.append(ctx)
+        targets.append(tgt)
+        scales.append(max(float(np.std(ctx)), 1e-6))
+        past_only.append(np.stack([series_set.series[ch][end - context : end] for ch in covariates]))
+        t = np.arange(end - context, end + horizon)
+        past_future.append(
+            np.stack([np.sin(2.0 * np.pi * t / period), np.cos(2.0 * np.pi * t / period)])
+        )
+    if not contexts:
+        return None
+    return (
+        np.stack(contexts).astype(np.float32),
+        np.stack(targets).astype(np.float32),
+        np.asarray(scales, dtype=np.float32),
+        np.stack(past_only).astype(np.float32),
+        np.stack(past_future).astype(np.float32),
+    )
+
+
 def eval_windows(
     data_dir: str,
     datasets: tuple[str, ...],

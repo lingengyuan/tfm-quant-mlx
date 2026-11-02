@@ -53,6 +53,33 @@ def test_fast_attention_matches_manual_attention():
     assert np.abs(fused - reference).max() < 5e-4
 
 
+def test_covariate_decode_returns_target_rows():
+    from tfmlab.runtime import predict_with_covariates
+
+    model = _model()
+    series = _series(1)
+    target = mx.array(series[None])
+    past_only = mx.array(np.stack([series[0], series[0]])[None])
+    past_future = mx.zeros((1, 2, 256 + 64), dtype=mx.float32)
+    out = np.array(
+        model.decode(
+            target, 64, past_only_covariates=past_only, past_future_covariates=past_future
+        )
+    )
+    # One target plus two past-only and two past-future covariates.
+    assert out.shape == (1, 5, 64, 9)
+
+    pred = predict_with_covariates(
+        model,
+        series,
+        np.stack([series[0], series[0]])[None],
+        np.zeros((1, 2, 256 + 64), dtype=np.float32),
+        64,
+        1,
+    )
+    assert pred.shape == (1, 64, 9)
+
+
 def test_multivariate_decode_builds_variate_attention_kv():
     from tfmlab.attention import install_kv
     from tfmlab.kv import make_kv
