@@ -1,0 +1,15 @@
+# Weight quantization x KV compression on one grid. Deltas stay relative to
+# fp32, so combined rows can be compared with the weight-only and KV-only rows.
+datasets: [ETTh1, ETTh2, ETTm1, ETTm2]
+synthetic: true
+contexts: [512, 2048, 8192, 15360]
+windows: 6
+weights: [fp32, mix_l18_19_8]
+kv: [affine4, affine4_l19fp16, turbo3_mse, turbo3_l19fp16]
+kv_weights: [fp32, mix_l18_19_8]
+kv_contexts: [2048, 8192, 15360]
+throughput_contexts: [512, 2048, 15360]
+throughput_batches: [1, 8, 32]
+repeats: 3
+eval_batch: 32
+out: results/combo.json

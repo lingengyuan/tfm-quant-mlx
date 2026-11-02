@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tfmq-lab"
+version = "0.1.0"
+description = "Quantization and long-context KV compression experiments for TimesFM 3.0 on Apple MLX"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "timesfm[mlx]>=3.0.2",
+    "mlx>=0.32",
+    "numpy>=2.0",
+    "pandas>=2.2",
+    "pyyaml>=6.0",
+    "tqdm>=4.66",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[project.scripts]
+tfmq = "tfmlab.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

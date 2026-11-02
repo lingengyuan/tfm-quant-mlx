@@ -1,0 +1,225 @@
+{
+  "created": "2026-11-02T13:02:36+0800",
+  "config": {
+    "checkpoint": "models/timesfm-3.0",
+    "data_dir": "data/raw",
+    "datasets": [
+      "ETTh1"
+    ],
+    "synthetic": true,
+    "context": 2048,
+    "horizon": 64,
+    "windows": 2,
+    "batch": 32,
+    "bits": 4,
+    "group_size": 64,
+    "out": "results/sensitivity.json"
+  },
+  "baseline": {
+    "pinball": 0.1152680292725563,
+    "nmae": 0.29417532682418823,
+    "crossing_rate": 0.0
+  },
+  "tests": [
+    {
+      "name": "layer00",
+      "bits": 4,
+      "weight_bytes": 1267547904,
+      "pinball": 0.11515477299690247,
+      "pinball_delta_pct": -0.09825471674026776,
+      "crossing_rate": 0.0
+    },
+    {
+      "name": "layer01",
+      "bits": 4,
+      "weight_bytes": 1267547904,
+      "pinball": 0.11533132195472717,
+      "pinball_delta_pct": 0.05490913878748599,
+      "crossing_rate": 0.0
+    },
+    {
+      "name": "layer02",
+      "bits": 4,
+      "weight_bytes": 1267547904,
+      "pinball": 0.11542979627847672,
+      "pinball_delta_pct": 0.14033987302576761,
+      "crossing_rate": 0.0
+    },
+    {
+      "name": "layer03",
+      "bits": 4,
+      "weight_bytes": 1267547904,
+      "pinball": 0.11582677811384201,
+      "pinball_delta_pct": 0.4847387821340464,
+      "crossing_rate": 0.0
+    },
+    {
+      "name": "layer04",
+      "bits": 4,
+      "weight_bytes": 1267547904,
+      "pinball": 0.11503499001264572,
+      "pinball_delta_pct": -0.20217163543201727,
+      "crossing_rate": 0.0
+    },
+    {
+      "name": "layer05",
+      "bits": 4,
+      "weight_bytes": 1267547904,
+      "pinball": 0.11538568139076233,
+      "pinball_delta_pct": 0.10206830024640275,
+      "crossing_rate": 0.0
+    },
+    {
+      "name": "layer06",
+      "bits": 4,
+      "weight_bytes": 1267547904,
+      "pinball": 0.11540357023477554,
+      "pinball_delta_pct": 0.1175876460061148,
+      "crossing_rate": 0.0
+    },
+    {
+      "name": "layer07",
+      "bits": 4,
+      "weight_bytes": 1267547904,
+      "pinball": 0.11536499857902527,
+      "pinball_delta_pct": 0.08412506666499472,
+      "crossing_rate": 0.0
+    },
+    {
+      "name": "layer08",
+      "bits": 4,
+      "weight_bytes": 1267547904,
+      "pinball": 0.1155715137720108,
+      "pinball_delta_pct": 0.26328592704304493,
+      "crossing_rate": 0.0
+    },
+    {
+      "name": "layer09",
+      "bits": 4,
+      "weight_bytes": 1267547904,
+      "pinball": 0.11519321799278259,
+      "pinball_delta_pct": -0.06490202031373124,
+      "crossing_rate": 0.0
+    },
+    {
+      "name": "layer10",
+      "bits": 4,
+      "weight_bytes": 1267547904,
+      "pinball": 0.1152246817946434,
+      "pinball_delta_pct": -0.037605811591005706,
+      "crossing_rate": 0.0
+    },
+    {
+      "name": "layer11",
+      "bits": 4,
+      "weight_bytes": 1267547904,
+      "pinball": 0.11531557142734528,
+      "pinball_delta_pct": 0.04124487517397859,
+      "crossing_rate": 0.0
+    },
+    {
+      "name": "layer12",
+      "bits": 4,
+      "weight_bytes": 1267547904,
+      "pinball": 0.11537525057792664,
+      "pinball_delta_pct": 0.09301911904540446,
+      "crossing_rate": 0.0
+    },
+    {
+      "name": "layer13",
+      "bits": 4,
+      "weight_bytes": 1267547904,
+      "pinball": 0.11531538516283035,
+      "pinball_delta_pct": 0.041083282652532194,
+      "crossing_rate": 0.0
+    },
+    {
+      "name": "layer14",
+      "bits": 4,
+      "weight_bytes": 1267547904,
+      "pinball": 0.11555793881416321,
+      "pinball_delta_pct": 0.2515090640800315,
+      "crossing_rate": 0.0
+    },
+    {
+      "name": "layer15",
+      "bits": 4,
+      "weight_bytes": 1267547904,
+      "pinball": 0.11560111492872238,
+      "pinball_delta_pct": 0.2889662105513065,
+      "crossing_rate": 0.0
+    },
+    {
+      "name": "layer16",
+      "bits": 4,
+      "weight_bytes": 1267547904,
+      "pinball": 0.11551202833652496,
+      "pinball_delta_pct": 0.21167973939392334,
+      "crossing_rate": 0.0
+    },
+    {
+      "name": "layer17",
+      "bits": 4,
+      "weight_bytes": 1267547904,
+      "pinball": 0.1153082549571991,
+      "pinball_delta_pct": 0.03489752093156408,
+      "crossing_rate": 0.0
+    },
+    {
+      "name": "layer18",
+      "bits": 4,
+      "weight_bytes": 1267547904,
+      "pinball": 0.11578559875488281,
+      "pinball_delta_pct": 0.4490139074926768,
+      "crossing_rate": 0.0
+    },
+    {
+      "name": "layer19",
+      "bits": 4,
+      "weight_bytes": 1267547904,
+      "pinball": 0.12438968569040298,
+      "pinball_delta_pct": 7.913431395862702,
+      "crossing_rate": 0.1626953125
+    },
+    {
+      "name": "all_attn",
+      "bits": 4,
+      "weight_bytes": 438107904,
+      "pinball": 0.12098835408687592,
+      "pinball_delta_pct": 4.962629143935177,
+      "crossing_rate": 0.028645833333333332
+    },
+    {
+      "name": "all_ffn",
+      "bits": 4,
+      "weight_bytes": 1101659904,
+      "pinball": 0.12301251292228699,
+      "pinball_delta_pct": 6.718674465595757,
+      "crossing_rate": 0.144140625
+    },
+    {
+      "name": "resblock",
+      "bits": 4,
+      "weight_bytes": 1315655424,
+      "pinball": 0.1182057335972786,
+      "pinball_delta_pct": 2.548585538645724,
+      "crossing_rate": 0.0
+    },
+    {
+      "name": "head8",
+      "bits": 8,
+      "weight_bytes": 1320724224,
+      "pinball": 0.11636356264352798,
+      "pinball_delta_pct": 0.9504225741391337,
+      "crossing_rate": 0.08678385416666666
+    },
+    {
+      "name": "head4",
+      "bits": 4,
+      "weight_bytes": 1320355584,
+      "pinball": 0.193397656083107,
+      "pinball_delta_pct": 67.78082986550396,
+      "crossing_rate": 0.36302083333333335
+    }
+  ]
+}

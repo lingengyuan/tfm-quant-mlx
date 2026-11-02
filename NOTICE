@@ -1,0 +1,24 @@
+Third-party notices
+===================
+
+TimesFM source code
+  https://github.com/google-research/timesfm
+  Apache-2.0.
+
+TimesFM 3.0 pretrained weights (google/timesfm-3.0-pytorch)
+  Distributed under the timesfm-non-commercial-license-v1.0.
+  Non-commercial, non-production use only. This repository never
+  redistributes the weights; download them yourself.
+
+PolarQuant / TurboQuant MLX port
+  Algorithm: arXiv:2502.02617 (PolarQuant), arXiv:2504.19874 (TurboQuant).
+  Reference implementation: https://github.com/lingengyuan/qjl-mlx (MIT,
+  Copyright (c) 2026 lingengyuan). The code in src/tfmlab/kv.py is a trimmed
+  reimplementation of that port for per-head attention vectors.
+
+QJL
+  arXiv:2406.03482. Implemented here as a 1-bit sign estimator with a
+  per-vector norm.
+
+ETT-small datasets
+  https://github.com/zhouhaoyi/ETDataset

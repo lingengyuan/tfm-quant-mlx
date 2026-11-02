@@ -1,0 +1,16 @@
+checkpoint: models/timesfm-3.0
+data_dir: data/raw
+datasets: [ETTh1, ETTh2, ETTm1, ETTm2]
+synthetic: true
+contexts: [512, 2048, 8192, 15360]
+horizon: 64
+windows: 6
+weights: [fp32, fp16, bf16, int8_g64, int4_g64, int4_g32, int4_g128]
+kv: [affine8, affine4, affine4_l19fp16, turbo3_mse, turbo3_l19fp16, turbo3_prod, turbo2_mse, qjl1]
+kv_contexts: [2048, 8192, 15360]
+throughput_contexts: [512, 2048, 15360]
+throughput_batches: [1, 8, 32]
+repeats: 3
+eval_batch: 32
+mem_batch: 8
+out: results/full.json
