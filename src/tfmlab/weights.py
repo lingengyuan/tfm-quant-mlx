@@ -35,6 +35,9 @@ class WeightSpec:
     # (path prefix, bits) overrides applied on top of ``bits``. Empty for a
     # uniform configuration.
     overrides: tuple[tuple[str, int], ...] = ()
+    # Per-group clipping fraction of the group max before quantization; None
+    # keeps RTN. Clipping trades outlier error for a smaller step size.
+    clip: float | None = None
 
     @property
     def kind(self) -> str:
@@ -52,6 +55,10 @@ def weight_specs(names: Iterable[str] | None = None) -> dict[str, WeightSpec]:
         "int4_g64": WeightSpec("int4_g64", bits=4, group_size=64),
         "int4_g32": WeightSpec("int4_g32", bits=4, group_size=32),
         "int4_g128": WeightSpec("int4_g128", bits=4, group_size=128),
+        # RTN with per-group clipping. The fraction is searched on ETT + Jena.
+        "int4c90_g64": WeightSpec("int4c90_g64", bits=4, group_size=64, clip=0.90),
+        "int4c95_g64": WeightSpec("int4c95_g64", bits=4, group_size=64, clip=0.95),
+        "int4c98_g64": WeightSpec("int4c98_g64", bits=4, group_size=64, clip=0.98),
         # Mixed configs keep the sensitive last layer and the input residual
         # block at 8-bit; everything else stays at 4-bit.
         "mix_l19_8": WeightSpec(
@@ -78,6 +85,16 @@ def weight_specs(names: Iterable[str] | None = None) -> dict[str, WeightSpec]:
                 ("pre_transformer_resblock", 8),
             ),
         ),
+        "mix_l18_19_8c95": WeightSpec(
+            "mix_l18_19_8c95",
+            bits=4,
+            clip=0.95,
+            overrides=(
+                ("transformer_stack.layers.18.", 8),
+                ("transformer_stack.layers.19.", 8),
+                ("pre_transformer_resblock", 8),
+            ),
+        ),
     }
     if names is None:
         return specs
@@ -85,6 +102,14 @@ def weight_specs(names: Iterable[str] | None = None) -> dict[str, WeightSpec]:
     if missing:
         raise ValueError(f"unknown weight specs: {sorted(missing)}")
     return {name: specs[name] for name in names}
+
+
+def _clip_groups(weight, group_size: int, fraction: float):
+    """Clip each input-dim group to ``fraction`` of its max absolute value."""
+    out_dims, in_dims = weight.shape
+    groups = weight.reshape(out_dims, in_dims // group_size, group_size)
+    limit = fraction * mx.max(mx.abs(groups), axis=-1, keepdims=True)
+    return mx.clip(groups, -limit, limit).reshape(out_dims, in_dims)
 
 
 def apply_weight_spec(model, spec: WeightSpec) -> None:
@@ -115,6 +140,14 @@ def apply_weight_spec(model, spec: WeightSpec) -> None:
             if bits == spec.bits:
                 return True
             return {"group_size": spec.group_size, "bits": bits}
+
+        if spec.clip is not None:
+            for path, module in model.named_modules():
+                if not isinstance(module, nn.Linear) or not predicate(path, module):
+                    continue
+                if bits_for(path) != spec.bits:
+                    continue
+                module.weight = _clip_groups(module.weight, spec.group_size, spec.clip)
 
         nn.quantize(
             model,

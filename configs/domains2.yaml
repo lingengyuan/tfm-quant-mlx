@@ -1,0 +1,15 @@
+# Two more domains: traffic (hourly) and exchange (daily); exchange has no
+# 15,360-row history, so long contexts use traffic only.
+datasets: [traffic, exchange]
+synthetic: false
+max_channels: 8
+contexts: [512, 2048, 8192, 15360]
+windows: 4
+weights: [fp32, int8_g64, int4_g64, int4c95_g64, mix_l18_19_8, mix_l18_19_8c95]
+kv: [affine4, affine4_l19fp16]
+kv_contexts: [2048, 15360]
+throughput_contexts: [2048, 15360]
+throughput_batches: [1]
+repeats: 1
+eval_batch: 16
+out: results/domains2.json

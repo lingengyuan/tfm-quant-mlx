@@ -1,6 +1,9 @@
+import numpy as np
 import pytest
 
-from tfmlab.weights import logical_quant_bits, weight_specs
+mx = pytest.importorskip("mlx.core")
+
+from tfmlab.weights import _clip_groups, logical_quant_bits, weight_specs
 
 
 def test_uniform_specs_have_bits():
@@ -21,3 +24,11 @@ def test_mixed_specs_report_no_single_bit_width():
 def test_unknown_spec_is_rejected():
     with pytest.raises(ValueError):
         weight_specs(["int3"])
+
+
+def test_clip_groups_limits_each_input_group():
+    weight = mx.array(
+        np.asarray([[1.0, -2.0, 0.5, 4.0], [0.1, 0.2, 0.3, 0.4]], dtype=np.float32)
+    )
+    clipped = np.asarray(_clip_groups(weight, group_size=2, fraction=0.5))
+    np.testing.assert_allclose(np.abs(clipped).max(axis=1), [2.0, 0.2])

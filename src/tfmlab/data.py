@@ -33,7 +33,15 @@ EXTRA_URLS = {
     "electricity": "https://archive.ics.uci.edu/static/public/321/electricityloaddiagrams20112014.zip",
 }
 EXTRA_FILES = {"jena": "jena_climate_2009_2016.csv", "electricity": "LD2011_2014.txt"}
-DATASET_NAMES = ETT_NAMES + tuple(EXTRA_URLS)
+
+# Gzipped space-separated multivariate tables without header or timestamps.
+MTS_URL = "https://raw.githubusercontent.com/laiguokun/multivariate-time-series-data/master/{folder}/{name}.txt.gz"
+MTS_SOURCES = {
+    "traffic": ("traffic", "traffic"),
+    "exchange": ("exchange_rate", "exchange_rate"),
+}
+MTS_NAMES = tuple(MTS_SOURCES)
+DATASET_NAMES = ETT_NAMES + tuple(EXTRA_URLS) + MTS_NAMES
 
 SYNTHETIC_LENGTH = 24_000
 
@@ -105,6 +113,29 @@ def load_electricity(cache_dir: str = "data/raw", max_channels: int = 8) -> Seri
     return _series_set("electricity", frame, "15min", max_channels)
 
 
+def load_mts(name: str, cache_dir: str = "data/raw", max_channels: int = 8) -> SeriesSet:
+    """Laiguokun multivariate tables: traffic (hourly) and exchange (daily)."""
+    if name not in MTS_SOURCES:
+        raise ValueError(f"unknown MTS dataset: {name}")
+    folder, filename = MTS_SOURCES[name]
+    dest = os.path.join(cache_dir, f"{name}.txt.gz")
+    if not os.path.exists(dest):
+        os.makedirs(cache_dir, exist_ok=True)
+        urllib.request.urlretrieve(
+            MTS_URL.format(folder=folder, name=filename), dest
+        )
+    usecols = range(max_channels) if max_channels else None
+    frame = pd.read_csv(
+        dest, sep=",", header=None, usecols=usecols, compression="gzip"
+    )
+    freq = "1h" if name == "traffic" else "1d"
+    return SeriesSet(
+        name,
+        tuple(frame.iloc[:, i].to_numpy(dtype=np.float32) for i in range(frame.shape[1])),
+        freq=freq,
+    )
+
+
 def load_dataset(name: str, cache_dir: str = "data/raw", max_channels: int = 0) -> SeriesSet:
     if name in ETT_NAMES:
         return load_ett(name, cache_dir)
@@ -112,6 +143,8 @@ def load_dataset(name: str, cache_dir: str = "data/raw", max_channels: int = 0) 
         return load_jena(cache_dir, max_channels)
     if name == "electricity":
         return load_electricity(cache_dir, max_channels)
+    if name in MTS_NAMES:
+        return load_mts(name, cache_dir, max_channels)
     raise ValueError(f"unknown dataset: {name}")
 
 

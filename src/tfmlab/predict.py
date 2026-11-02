@@ -1,8 +1,13 @@
 """Forecast a CSV with an optional weight and KV configuration.
 
-Each numeric column is decoded as an independent univariate series. The last
-``context`` finite values are used; output rows carry the point forecast and
-nine quantiles per step.
+Modes:
+
+* default: every numeric column is an independent univariate series;
+* ``multi``: all numeric columns are decoded together as variates;
+* ``covariates``: the last numeric column is the target, the others are
+  past-only covariates, and sin/cos calendar features are past-future.
+
+Output rows carry the point forecast and nine quantiles per step.
 """
 
 from __future__ import annotations
@@ -13,7 +18,7 @@ import numpy as np
 import pandas as pd
 
 from .attention import install_kv_named
-from .runtime import load_model, predict, unload_model
+from .runtime import load_model, predict, predict_with_covariates, unload_model
 from .weights import apply_weight_spec, weight_specs
 
 TAUS = ("0.1", "0.2", "0.3", "0.4", "0.5", "0.6", "0.7", "0.8", "0.9")
@@ -28,6 +33,9 @@ class PredictConfig:
     horizon: int = 64
     weights: str = "fp32"
     kv: str = "none"
+    multi: bool = False
+    covariates: bool = False
+    period: float = 24.0
 
 
 def series_from_frame(frame: pd.DataFrame, context: int) -> dict[str, np.ndarray]:
@@ -47,6 +55,16 @@ def series_from_frame(frame: pd.DataFrame, context: int) -> dict[str, np.ndarray
     return series
 
 
+def stacked_series(
+    frame: pd.DataFrame, context: int
+) -> tuple[list[str], np.ndarray, int]:
+    """Columns truncated to a common tail, stacked as variates."""
+    series = series_from_frame(frame, context)
+    length = min(len(values) for values in series.values())
+    names = list(series)
+    return names, np.stack([series[name][-length:] for name in names]), length
+
+
 def format_forecast(name: str, pred: np.ndarray) -> pd.DataFrame:
     """Long-form rows: series, step, point, q0.1 .. q0.9 (sorted per step)."""
     pred = np.sort(pred, axis=-1)
@@ -63,17 +81,43 @@ def format_forecast(name: str, pred: np.ndarray) -> pd.DataFrame:
 
 
 def run(cfg: PredictConfig) -> pd.DataFrame:
+    if cfg.multi and cfg.covariates:
+        raise ValueError("choose one of multi or covariates")
     frame = pd.read_csv(cfg.input)
-    series = series_from_frame(frame, cfg.context)
     model = load_model(cfg.checkpoint)
     apply_weight_spec(model, weight_specs([cfg.weights])[cfg.weights])
     if cfg.kv not in ("none", "off", ""):
         install_kv_named(model, cfg.kv)
 
-    outputs = []
-    for name, values in series.items():
-        pred = predict(model, values[None, :], cfg.horizon, 1)[0]
-        outputs.append(format_forecast(name, pred))
+    if cfg.multi:
+        names, contexts, _ = stacked_series(frame, cfg.context)
+        pred = predict(model, contexts[None], cfg.horizon, 1)[0]
+        outputs = [format_forecast(name, pred[i]) for i, name in enumerate(names)]
+        series = {name: None for name in names}
+    elif cfg.covariates:
+        names, contexts, length = stacked_series(frame, cfg.context)
+        if len(names) < 2:
+            raise ValueError("covariates mode needs at least two numeric columns")
+        t = np.arange(length + cfg.horizon)
+        past_future = np.stack(
+            [np.sin(2.0 * np.pi * t / cfg.period), np.cos(2.0 * np.pi * t / cfg.period)]
+        ).astype(np.float32)
+        pred = predict_with_covariates(
+            model,
+            contexts[-1][None],
+            contexts[:-1][None],
+            past_future[None],
+            cfg.horizon,
+            1,
+        )[0]
+        outputs = [format_forecast(names[-1], pred)]
+        series = {names[-1]: None}
+    else:
+        series = series_from_frame(frame, cfg.context)
+        outputs = [
+            format_forecast(name, predict(model, values[None], cfg.horizon, 1)[0])
+            for name, values in series.items()
+        ]
     unload_model(model)
 
     result = pd.concat(outputs, ignore_index=True)

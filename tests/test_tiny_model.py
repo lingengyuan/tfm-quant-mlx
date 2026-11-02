@@ -53,6 +53,16 @@ def test_fast_attention_matches_manual_attention():
     assert np.abs(fused - reference).max() < 5e-4
 
 
+def test_int4_clipping_quantizes_tiny_model():
+    from tfmlab.weights import apply_weight_spec, weight_specs
+
+    model = _model()
+    apply_weight_spec(model, weight_specs(["int4c95_g64"])["int4c95_g64"])
+    out = np.array(model.decode(mx.array(_series(1)[None]), 64))
+    assert out.shape == (1, 1, 64, 9)
+    assert np.isfinite(out).all()
+
+
 def test_install_kv_named_splits_scope_plan():
     from tfmlab.attention import _KV_ATTR, install_kv_named
 

@@ -1,0 +1,13 @@
+# int4 with per-group clipping against plain RTN.
+datasets: [ETTh1, ETTh2, ETTm1, ETTm2]
+synthetic: true
+contexts: [2048, 15360]
+windows: 6
+weights: [fp32, int4_g64, int4c95_g64, mix_l18_19_8, mix_l18_19_8c95]
+kv: []
+kv_contexts: []
+throughput_contexts: [15360]
+throughput_batches: [1]
+repeats: 1
+eval_batch: 32
+out: results/clip.json

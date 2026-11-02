@@ -163,6 +163,9 @@ def _cmd_predict(args) -> int:
             horizon=args.horizon,
             weights=args.weights,
             kv=args.kv,
+            multi=args.multi,
+            covariates=args.covariates,
+            period=args.period,
         )
     )
     return 0
@@ -261,6 +264,9 @@ def main(argv: list[str] | None = None) -> int:
     pred_p.add_argument("--horizon", type=int, default=64)
     pred_p.add_argument("--weights", default="fp32")
     pred_p.add_argument("--kv", default="none")
+    pred_p.add_argument("--multi", action="store_true", help="decode columns as variates")
+    pred_p.add_argument("--covariates", action="store_true", help="last column is the target")
+    pred_p.add_argument("--period", type=float, default=24.0, help="calendar period for covariates")
     pred_p.set_defaults(func=_cmd_predict)
 
     hor_p = sub.add_parser("horizon", help="quantization and KV across horizons")

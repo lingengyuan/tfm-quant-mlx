@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 
-from tfmlab.predict import format_forecast, series_from_frame
+from tfmlab.predict import format_forecast, series_from_frame, stacked_series
 
 
 def test_series_from_frame_takes_tail_and_drops_nan():
@@ -16,6 +16,17 @@ def test_series_from_frame_takes_tail_and_drops_nan():
     assert set(series) == {"a", "b"}
     assert series["a"].tolist() == [4.0, 5.0]
     assert series["b"].tolist() == [8.0, 9.0]
+
+
+def test_stacked_series_uses_common_tail():
+    frame = pd.DataFrame(
+        {"a": [1.0, 2.0, 3.0, 4.0, 5.0], "b": [0.0, np.nan, 3.0, 4.0, 5.0]}
+    )
+    names, contexts, length = stacked_series(frame, context=8)
+    assert names == ["a", "b"]
+    assert length == 4
+    assert contexts.shape == (2, 4)
+    assert contexts[1].tolist() == [0.0, 3.0, 4.0, 5.0]
 
 
 def test_format_forecast_sorts_quantiles():

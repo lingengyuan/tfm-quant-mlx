@@ -2,6 +2,8 @@
 
 [![tests](https://github.com/lingengyuan/tfm-quant-mlx/actions/workflows/tests.yml/badge.svg)](https://github.com/lingengyuan/tfm-quant-mlx/actions/workflows/tests.yml)
 
+[English](README.en.md)
+
 在 Apple Silicon 上评测 TimesFM 3.0（331M，MLX 后端）的权重精度、低比特量化与长上下文 KV 工作集压缩，统一测算点预测、9 个十分位、显存和吞吐。
 
 - 模型：`google/timesfm-3.0-pytorch`，20 层、1280 维、16 头、上下文上限 15,360、horizon 64。
@@ -11,13 +13,13 @@
 
 - `fp16` / `bf16`：权重 1323 → 661 MB（2.00×），pinball 变化 ≤0.05%；`int8_g64` 375 MB（3.53×），+0.11%。
 - 纯 `int4`：191–251 MB（5.3–6.9×），pinball +10–12%，逆序率 9–19%。损失集中在末层（单独 4-bit +7.9%）和输出头（4-bit +67.8%）。
-- 4-bit 体积下用 `mix_l18_19_8`（227 MB，5.82×，+0.80%）或 `mix_top3_8`（235 MB，5.62×，+0.66%），逆序率 0.7%。
+- 4-bit 体积下默认用 `mix_l18_19_8`（227 MB，5.82×，+0.80%）。裁剪 0.95 的 `mix_l18_19_8c95` 在 ETT/Jena 上到 −0.22% / +0.61%，但在 traffic 上更差（+2.00%），不是通用默认。
 - KV：`affine8` 1.78×（−0.01%）、`affine4` 3.20×（+0.52%）、`turbo3_mse` 4.96×（+2.71%）；1-bit QJL +73%，不可用。
 - KV 末层：第 19 层留 fp16，`affine4` 从 +0.52% 降到 **−0.36%**（137 MB，2.88×）；`turbo3_mse` 从 +2.71% 降到 +0.69%（95 MB，4.14×）。逐头误差分散，无单头主导。
 - 组合：`mix_l18_19_8 + affine4_l19fp16` 的 pinball +0.82%，权重 227 MB、KV 137 MB、峰值 1755 MB（fp32 2774 MB）。
 - 多变量（ETT 7 通道同批）：fp32 pinball 0.1152，优于单变量 0.1168；KV 压缩损失放大约 6 倍，主要来自 variate attention；seq 用 `affine4`、var 用 `affine8` 后为 +1.15%（2418 MB，2.29×）。
 - 协变量：去掉协变量 pinball +4.98%；带上协变量后 int8 +0.35%、int4 +17.2%、mix −0.87%；KV `affine4` +3.55%，seq/var 混合 −0.91%。
-- 跨域（ETTh1 + Jena + Electricity）：int8 +0.17%，int4 +22.7%（Jena +47.9%），mix +1.37%；KV `affine4` +2.21%，第 19 层 fp16 +0.90%。
+- 跨域（ETTh1 + Jena + Electricity）：int8 +0.17%，int4 +22.7%（Jena +47.9%），mix +1.37%，`mix_l18_19_8c95` +0.11%（Jena +0.61%）；KV `affine4` +2.21%，第 19 层 fp16 +0.90%。
 - 更长 horizon（64 → 1024）：int4 相对损失从 +8.2% 降到 +3.0%，mix 从 +2.6% 到 −0.8%；绝对 pinball 0.149 → 0.284。stitching 不放大相对量化误差。
 - 量化不提速：模型层 GEMM 只有 482 token，int4 反而慢 9%；端到端差异 ≤9%。4-bit 的收益在显存（2774 → 1717 MB），不在吞吐。
 - 基准对齐：MLX fp32 与 PyTorch 后端在 4 个 ETT 的 56 条序列上平均归一化偏差 0.0013、最大 0.0166，pinball 差 −0.001%（ctx 15,360）。
@@ -49,13 +51,34 @@ MLX fp32 基线与原实现一致，其余表格的 `Δ` 有可信参照。完�
 | bf16 | 661 | 2.00× | 16.00 | 0.3193 | +0.01% | 0.1258 | +0.03% | 0.0493 | 0.64 | 10 | 2208 |
 | int8_g64 | 375 | 3.53× | 9.00 | 0.3194 | +0.07% | 0.1259 | +0.11% | 0.0459 | 0.72 | 8 | 1882 |
 | int4_g64 | 210 | 6.31× | 5.00 | 0.3511 | +10.20% | 0.1385 | +10.86% | 0.0603 | 18.51 | 9 | 1717 |
+| int4c95_g64 | 210 | 6.31× | 5.00 | 0.3483 | +9.74% | 0.1382 | +11.10% | 0.0618 | 16.74 | 9 | 1717 |
 | int4_g32 | 251 | 5.27× | 6.00 | 0.3499 | +9.83% | 0.1380 | +10.36% | 0.0614 | 16.45 | 8 | 1756 |
 | int4_g128 | 191 | 6.93× | 4.50 | 0.3549 | +11.78% | 0.1397 | +12.05% | 0.0687 | 12.12 | 10 | 1699 |
 | mix_l19_8 | 219 | 6.04× | mix | 0.3234 | +1.14% | 0.1277 | +1.33% | 0.0560 | 0.73 | 9 | 1726 |
 | mix_l18_19_8 | 227 | 5.82× | mix | 0.3225 | +0.84% | 0.1270 | +0.80% | 0.0544 | 0.70 | 9 | 1734 |
+| mix_l18_19_8c95 | 227 | 5.82× | mix | 0.3183 | −0.14% | 0.1252 | −0.22% | 0.0546 | 0.73 | 9 | 1734 |
 | mix_top3_8 | 235 | 5.62× | mix | 0.3222 | +0.74% | 0.1269 | +0.66% | 0.0532 | 0.68 | 9 | 1743 |
 
 `int4_g128` 跳过输入维 192 的残差块，这部分保持 fp32。混合配置其余层 4-bit；`mix_l19_8` 把第 19 层和输入残差块留 8-bit，`mix_l18_19_8` 再留第 18 层，`mix_top3_8` 再留第 3 层。输出头始终 fp32。
+
+### int4 裁剪（上下文 15,360）
+
+量化前把每个输入分组裁到组内最大绝对值的 95%（`int4c95_g64`、`mix_l18_19_8c95`），压掉离群值，步长随之变小。
+
+| 配置 | ETT + 合成 | 跨域 | Jena |
+|---|---|---|---|
+| int4_g64 | +10.86% | +22.70% | +47.88% |
+| int4c95_g64 | +11.10% | +18.96% | +34.28% |
+| mix_l18_19_8 | +0.80% | +1.37% | +3.62% |
+| mix_l18_19_8c95 | −0.22% | +0.11% | +0.61% |
+
+- 裁剪对混合精度在 ETT/Jena 上稳定有效：ETT 从 +0.80% 到 −0.22%，跨域从 +1.37% 到 +0.11%。
+- 纯 int4 只在 Jena 上明显；ETT 持平（+10.86% → +11.10%），Electricity 变差（+9.14% → +13.21%）。
+- 不是通用默认：traffic 上 `mix_l18_19_8` +1.43% → c95 +2.00%，int4 +32.9% → +42.4%（15360）；exchange 上 int4 从 +10.9% 降到 +5.1%（2048）。
+
+默认仍用 `mix_l18_19_8`；ETT/Jena 类数据可用 `mix_l18_19_8c95`。
+
+完整表见 [`results/clip_report.md`](results/clip_report.md)。
 
 ### 为什么量化不提速（上下文 15,360）
 
@@ -213,7 +236,9 @@ ETTh1 加 Jena Climate（10 分钟）与 UCI Electricity（15 分钟），每表
 |---|---|---|---|---|
 | int8_g64 | −0.07% | +0.44% | +0.15% | +0.17% |
 | int4_g64 | +11.08% | +47.88% | +9.14% | +22.70% |
+| int4c95_g64 | +9.38% | +34.28% | +13.21% | +18.96% |
 | mix_l18_19_8 | +0.77% | +3.62% | −0.28% | +1.37% |
+| mix_l18_19_8c95 | +0.45% | +0.61% | −0.73% | +0.11% |
 | KV affine4 | +0.05% | +4.81% | +1.76% | +2.21% |
 | KV affine4_l19fp16 | −0.67% | +3.44% | −0.06% | +0.90% |
 
@@ -221,7 +246,22 @@ ETTh1 加 Jena Climate（10 分钟）与 UCI Electricity（15 分钟），每表
 - int4 对域敏感：Jena +47.9%，是 ETTh1 的 4 倍；`mix_l18_19_8` 把 Jena 压到 +3.6%。
 - KV `affine4` 在 Jena 上 +4.8%；第 19 层 fp16 把聚合损失从 +2.21% 降到 +0.90%。
 
-完整表见 [`results/domains_report.md`](results/domains_report.md)。
+traffic（小时）与 exchange（日频，7,588 行，不支持 15,360）：
+
+| 配置 | traffic 2,048 | exchange 2,048 | traffic 15,360 |
+|---|---|---|---|
+| int8_g64 | +0.22% | −0.15% | +0.22% |
+| int4_g64 | +33.03% | +10.88% | +32.87% |
+| int4c95_g64 | +37.89% | +5.14% | +42.43% |
+| mix_l18_19_8 | +2.65% | −4.41% | +1.43% |
+| mix_l18_19_8c95 | +1.34% | −7.29% | +2.00% |
+| KV affine4 | +10.47% | +2.68% | +7.05% |
+| KV affine4_l19fp16 | +5.74% | +2.15% | +2.41% |
+
+- traffic 的 int4 损失高于 ETT（+33%），裁剪 0.95 进一步放大。
+- exchange 上裁剪把 int4 从 +10.9% 降到 +5.1%，方向与 traffic 相反。
+
+完整表见 [`results/domains_report.md`](results/domains_report.md)、[`results/domains2_report.md`](results/domains2_report.md)。
 
 ### 更长 horizon（上下文 2,048）
 
@@ -279,7 +319,10 @@ uv pip install -e .
   --weights int8_g64 --kv affine4 -o forecasts.csv
 ```
 
-每个数值列作为独立单变量序列，取最后 `context` 个有效值。输出列为 `series, step, point, q0.1 … q0.9`，分位按行排序。`--weights` 与 `--kv` 省略时用 fp32 和未压缩。
+每个数值列默认作为独立单变量序列，取最后 `context` 个有效值。输出列为 `series, step, point, q0.1 … q0.9`，分位按行排序。`--weights` 与 `--kv` 省略时用 fp32 和未压缩。
+
+- `--multi`：所有数值列作为 variate 一起 decode。
+- `--covariates`：最后一列为目标，其余列为 past-only，sin/cos 日历特征为 past-future；`--period` 默认 24。
 
 ### 配置
 
@@ -300,7 +343,7 @@ uv pip install -e .
 ### 完整网格与探针
 
 ```bash
-for cfg in full mixed combo multi uni_control multi_scope multi_kv_mixed domains kv_mixed; do
+for cfg in full mixed combo multi uni_control multi_scope multi_kv_mixed domains domains2 kv_mixed; do
   .venv/bin/tfmq run --config configs/$cfg.yaml
 done
 .venv/bin/tfmq report results/full.json -o results/report.md
@@ -327,7 +370,7 @@ done
 
 ### 数据与指标
 
-- 数据：ETT-small（ETTh1/ETTh2/ETTm1/ETTm2，每表 7 个通道）、Jena Climate（10 分钟，14 通道）、UCI Electricity（15 分钟，321 通道），加 8 条确定性合成序列。
+- 数据：ETT-small（ETTh1/ETTh2/ETTm1/ETTm2，每表 7 个通道）、Jena Climate（10 分钟，14 通道）、UCI Electricity（15 分钟，321 通道）、traffic（小时，862 通道）、exchange（日频，8 通道），加 8 条确定性合成序列。
 - 窗口：每条序列用最后 `context` 个点预测未来 64 点；多变量模式下同一时刻的 7 个通道一起 decode。
 - 协变量：最后一个通道为目标，其余通道为 past-only，sin/cos 日历特征为 past-future。
 - `nMAE`、`pinball` 按每条窗口上下文标准差归一化；`Δ` 为相对同窗口 fp32 的变化。
@@ -339,6 +382,7 @@ done
 - `fp32` / `fp16` / `bf16`：整棵模块树转换 dtype。
 - `int8_g64` / `int4_g64` / `int4_g32` / `int4_g128`：MLX affine 量化，输出头保持 fp32；`int4_g128` 跳过输入维不整除 128 的层。
 - 混合精度按 `tfmq sensitivity` 的逐层结果保留末层、残差块或第 3 层为 8-bit。
+- 裁剪：`int4c95_g64` 与 `mix_l18_19_8c95` 在量化前把每个输入分组裁到组内最大绝对值的 95%。
 
 ### KV 压缩
 
@@ -386,7 +430,8 @@ tests/
 - KV 敏感度只覆盖 ETTh1 + synthetic 的 60 个窗口。第 19 层的结论在两种压缩模式下一致；混合 KV 的 −0.36% 幅度小于 1%，不应外推。
 - 多变量只测 ETT 的 7 通道同批；未覆盖变量数变化和变量子集。
 - 协变量只测 24 条目标序列；past-only 用其他 ETT 通道，past-future 用日历特征，未覆盖真实外生变量。
-- 跨域只取 Jena 与 Electricity 的前 8 个通道；horizon 探针只测 ETTh1、ctx 2,048。
+- 跨域只取 Jena、Electricity、traffic、exchange 的前 8 个通道；exchange 不支持 15,360；horizon 探针只测 ETTh1、ctx 2,048。
+- 吞吐为单次中位延迟。quick 预设重复 3 次，batch 8 平均吞吐 55.6–59.1 series/s；单个 (config, ctx, batch) 的 run-to-run 波动中位数 13%，最大 33%。
 - PyTorch 对照只在 CPU 上跑，未验证 MPS 路径。
 - TimesFM 3.0 权重使用 non-commercial 许可证，本仓库不重新分发权重。
 
