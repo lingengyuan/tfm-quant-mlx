@@ -168,6 +168,24 @@ def _cmd_predict(args) -> int:
     return 0
 
 
+def _cmd_horizon(args) -> int:
+    from .horizon import HorizonConfig, run as run_horizon
+
+    run_horizon(
+        HorizonConfig(
+            checkpoint=args.checkpoint,
+            datasets=tuple(args.datasets.split(",")),
+            context=args.context,
+            horizons=tuple(int(h) for h in args.horizons.split(",")),
+            windows=args.windows,
+            repeats=args.repeats,
+            out=args.out,
+            md=args.md,
+        )
+    )
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="tfmq")
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -244,6 +262,17 @@ def main(argv: list[str] | None = None) -> int:
     pred_p.add_argument("--weights", default="fp32")
     pred_p.add_argument("--kv", default="none")
     pred_p.set_defaults(func=_cmd_predict)
+
+    hor_p = sub.add_parser("horizon", help="quantization and KV across horizons")
+    hor_p.add_argument("--checkpoint", default="models/timesfm-3.0")
+    hor_p.add_argument("--datasets", default="ETTh1", help="comma separated")
+    hor_p.add_argument("--context", type=int, default=2048)
+    hor_p.add_argument("--horizons", default="64,256,1024", help="comma separated")
+    hor_p.add_argument("--windows", type=int, default=4)
+    hor_p.add_argument("--repeats", type=int, default=2)
+    hor_p.add_argument("--out", default="results/horizon.json")
+    hor_p.add_argument("--md", default="results/horizon.md")
+    hor_p.set_defaults(func=_cmd_horizon)
 
     args = parser.parse_args(argv)
     return args.func(args)

@@ -53,6 +53,17 @@ def test_fast_attention_matches_manual_attention():
     assert np.abs(fused - reference).max() < 5e-4
 
 
+def test_install_kv_named_splits_scope_plan():
+    from tfmlab.attention import _KV_ATTR, install_kv_named
+
+    model = _model()
+    compressors = install_kv_named(model, "affine4_seq_var8")
+    layers = model.transformer_stack.layers
+    assert len(compressors) == 2 * len(layers)
+    assert getattr(layers[0].seq_attn, _KV_ATTR).bits == 4
+    assert getattr(layers[0].var_attn, _KV_ATTR).bits == 8
+
+
 def test_covariate_decode_returns_target_rows():
     from tfmlab.runtime import predict_with_covariates
 

@@ -1,9 +1,11 @@
 """Evaluation data.
 
-Two sources:
+Sources:
 
 * ETT-small (ETTh1/ETTh2/ETTm1/ETTm2), downloaded from the ETDataset repository.
   Seven real channels per table.
+* Jena Climate (14 channels, 10-minute) and UCI Electricity (321 channels,
+  15-minute) for domain coverage beyond ETT.
 * A deterministic synthetic suite with eight regimes. It runs without network
   access and reaches the 15,360-point context used for the long-context tests.
 
@@ -16,13 +18,22 @@ from __future__ import annotations
 
 import dataclasses
 import os
+import shutil
 import urllib.request
+import zipfile
 
 import numpy as np
 import pandas as pd
 
 ETT_URL = "https://raw.githubusercontent.com/zhouhaoyi/ETDataset/main/ETT-small/{name}.csv"
 ETT_NAMES = ("ETTh1", "ETTh2", "ETTm1", "ETTm2")
+
+EXTRA_URLS = {
+    "jena": "https://storage.googleapis.com/tensorflow/tf-keras-datasets/jena_climate_2009_2016.csv.zip",
+    "electricity": "https://archive.ics.uci.edu/static/public/321/electricityloaddiagrams20112014.zip",
+}
+EXTRA_FILES = {"jena": "jena_climate_2009_2016.csv", "electricity": "LD2011_2014.txt"}
+DATASET_NAMES = ETT_NAMES + tuple(EXTRA_URLS)
 
 SYNTHETIC_LENGTH = 24_000
 
@@ -52,6 +63,56 @@ def load_ett(name: str, cache_dir: str = "data/raw") -> SeriesSet:
     values = frame.to_numpy(dtype=np.float32)
     freq = "15min" if name.startswith("ETTm") else "1h"
     return SeriesSet(name, tuple(values[:, i] for i in range(values.shape[1])), freq)
+
+
+def _prepare_csv(name: str, cache_dir: str) -> str:
+    dest = os.path.join(cache_dir, f"{name}.csv")
+    if os.path.exists(dest):
+        return dest
+    os.makedirs(cache_dir, exist_ok=True)
+    archive_path = os.path.join(cache_dir, f"{name}.zip")
+    if not os.path.exists(archive_path):
+        urllib.request.urlretrieve(EXTRA_URLS[name], archive_path)
+    with zipfile.ZipFile(archive_path) as archive:
+        member = next(m for m in archive.namelist() if m.endswith(EXTRA_FILES[name]))
+        with archive.open(member) as src, open(dest, "wb") as out:
+            shutil.copyfileobj(src, out)
+    return dest
+
+
+def _series_set(name: str, frame: pd.DataFrame, freq: str, max_channels: int) -> SeriesSet:
+    numeric = frame.select_dtypes(include=[np.number])
+    if max_channels:
+        numeric = numeric.iloc[:, :max_channels]
+    return SeriesSet(
+        name,
+        tuple(numeric.iloc[:, i].to_numpy(dtype=np.float32) for i in range(numeric.shape[1])),
+        freq=freq,
+    )
+
+
+def load_jena(cache_dir: str = "data/raw", max_channels: int = 0) -> SeriesSet:
+    """Jena Climate, 10-minute samples, 14 numeric channels."""
+    frame = pd.read_csv(_prepare_csv("jena", cache_dir))
+    return _series_set("jena", frame, "10min", max_channels)
+
+
+def load_electricity(cache_dir: str = "data/raw", max_channels: int = 8) -> SeriesSet:
+    """UCI Electricity load diagrams, 15-minute samples, comma decimals."""
+    frame = pd.read_csv(
+        _prepare_csv("electricity", cache_dir), sep=";", decimal=",", index_col=0
+    )
+    return _series_set("electricity", frame, "15min", max_channels)
+
+
+def load_dataset(name: str, cache_dir: str = "data/raw", max_channels: int = 0) -> SeriesSet:
+    if name in ETT_NAMES:
+        return load_ett(name, cache_dir)
+    if name == "jena":
+        return load_jena(cache_dir, max_channels)
+    if name == "electricity":
+        return load_electricity(cache_dir, max_channels)
+    raise ValueError(f"unknown dataset: {name}")
 
 
 def _t(index: np.ndarray, period: float) -> np.ndarray:

@@ -22,3 +22,11 @@ QJL
 
 ETT-small datasets
   https://github.com/zhouhaoyi/ETDataset
+
+Jena Climate dataset
+  Max Planck Institute for Biogeochemistry; downloaded from the TensorFlow /
+  Keras dataset mirror. Not redistributed here.
+
+UCI Electricity Load Diagrams 2011-2014
+  https://archive.ics.uci.edu/dataset/321/electricityloaddiagrams20112014
+  Not redistributed here.

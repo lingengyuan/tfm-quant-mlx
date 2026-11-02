@@ -17,6 +17,8 @@
 - 组合：`mix_l18_19_8 + affine4_l19fp16` 的 pinball +0.82%，权重 227 MB、KV 137 MB、峰值 1755 MB（fp32 2774 MB）。
 - 多变量（ETT 7 通道同批）：fp32 pinball 0.1152，优于单变量 0.1168；KV 压缩损失放大约 6 倍，主要来自 variate attention；seq 用 `affine4`、var 用 `affine8` 后为 +1.15%（2418 MB，2.29×）。
 - 协变量：去掉协变量 pinball +4.98%；带上协变量后 int8 +0.35%、int4 +17.2%、mix −0.87%；KV `affine4` +3.55%，seq/var 混合 −0.91%。
+- 跨域（ETTh1 + Jena + Electricity）：int8 +0.17%，int4 +22.7%（Jena +47.9%），mix +1.37%；KV `affine4` +2.21%，第 19 层 fp16 +0.90%。
+- 更长 horizon（64 → 1024）：int4 相对损失从 +8.2% 降到 +3.0%，mix 从 +2.6% 到 −0.8%；绝对 pinball 0.149 → 0.284。stitching 不放大相对量化误差。
 - 量化不提速：模型层 GEMM 只有 482 token，int4 反而慢 9%；端到端差异 ≤9%。4-bit 的收益在显存（2774 → 1717 MB），不在吞吐。
 - 基准对齐：MLX fp32 与 PyTorch 后端在 4 个 ETT 的 56 条序列上平均归一化偏差 0.0013、最大 0.0166，pinball 差 −0.001%（ctx 15,360）。
 
@@ -203,6 +205,51 @@ var 从 affine8 提到 fp16 只多回收 0.23 pp，KV 却从 2418 增到 3628 MB
 
 完整表见 [`results/covariates.md`](results/covariates.md)。
 
+### 跨域验证（上下文 15,360）
+
+ETTh1 加 Jena Climate（10 分钟）与 UCI Electricity（15 分钟），每表取前 8 个通道，每条序列 4 个窗口。
+
+| 配置 | ETTh1 | Jena | Electricity | 聚合 |
+|---|---|---|---|---|
+| int8_g64 | −0.07% | +0.44% | +0.15% | +0.17% |
+| int4_g64 | +11.08% | +47.88% | +9.14% | +22.70% |
+| mix_l18_19_8 | +0.77% | +3.62% | −0.28% | +1.37% |
+| KV affine4 | +0.05% | +4.81% | +1.76% | +2.21% |
+| KV affine4_l19fp16 | −0.67% | +3.44% | −0.06% | +0.90% |
+
+- int8 跨域稳定，损失 ≤0.5 pp。
+- int4 对域敏感：Jena +47.9%，是 ETTh1 的 4 倍；`mix_l18_19_8` 把 Jena 压到 +3.6%。
+- KV `affine4` 在 Jena 上 +4.8%；第 19 层 fp16 把聚合损失从 +2.21% 降到 +0.90%。
+
+完整表见 [`results/domains_report.md`](results/domains_report.md)。
+
+### 更长 horizon（上下文 2,048）
+
+ETTh1，每条序列 4 个窗口。
+
+| horizon | 配置 | Δpinball | cross % |
+|---|---|---|---|
+| 64 | int8_g64 | −0.04% | 0.00% |
+| 64 | int4_g64 | +8.20% | 10.48% |
+| 64 | mix_l18_19_8 | +2.56% | 0.00% |
+| 64 | affine4 | +1.60% | 0.00% |
+| 256 | int8_g64 | −0.05% | 0.00% |
+| 256 | int4_g64 | +4.36% | 6.57% |
+| 256 | mix_l18_19_8 | +0.49% | 0.00% |
+| 256 | affine4 | +2.01% | 0.00% |
+| 1024 | int8_g64 | −0.12% | 0.00% |
+| 1024 | int4_g64 | +2.97% | 3.20% |
+| 1024 | mix_l18_19_8 | −0.76% | 0.00% |
+| 1024 | affine4 | +1.79% | 0.00% |
+
+fp32 pinball：0.1492 / 0.1915 / 0.2840（h=64 / 256 / 1024）。batch 8 的 fp32 延迟 78–115 ms；重复运行波动最高约 20%，量化与 KV 没有稳定加速。
+
+- int4 的相对损失随 horizon 下降（+8.20% → +2.97%），因为长 horizon 的绝对误差本身在变大。
+- `mix_l18_19_8` 与 `affine4` 在各 horizon 保持 ≤2.6% / ≤2.0%。
+- stitching 没有放大相对量化误差。
+
+完整表见 [`results/horizon.md`](results/horizon.md)。
+
 ## 使用
 
 ### 安装
@@ -240,7 +287,8 @@ uv pip install -e .
 
 | 字段 | 作用 |
 |---|---|
-| `datasets` / `synthetic` | 评测数据集；`synthetic` 关闭时只用 ETT |
+| `datasets` / `synthetic` | 评测数据集；`synthetic` 关闭时只用真实数据 |
+| `max_channels` | 每个数据集保留的通道数；0 表示全部 |
 | `contexts` / `windows` | 上下文长度；每条序列的窗口数 |
 | `weights` | 权重配置列表 |
 | `kv` / `kv_contexts` | KV 模式；测 KV 的上下文 |
@@ -252,7 +300,7 @@ uv pip install -e .
 ### 完整网格与探针
 
 ```bash
-for cfg in full mixed combo multi uni_control multi_scope multi_kv_mixed kv_mixed; do
+for cfg in full mixed combo multi uni_control multi_scope multi_kv_mixed domains kv_mixed; do
   .venv/bin/tfmq run --config configs/$cfg.yaml
 done
 .venv/bin/tfmq report results/full.json -o results/report.md
@@ -263,6 +311,7 @@ done
 .venv/bin/tfmq profile
 .venv/bin/tfmq parity  # 需要 torch：uv pip install -e ".[parity]"
 .venv/bin/tfmq covariates
+.venv/bin/tfmq horizon
 ```
 
 完整网格在 M5 / 32 GB 上约 20–25 分钟。
@@ -278,7 +327,7 @@ done
 
 ### 数据与指标
 
-- 数据：ETT-small（ETTh1/ETTh2/ETTm1/ETTm2，每表 7 个通道）加 8 条确定性合成序列。
+- 数据：ETT-small（ETTh1/ETTh2/ETTm1/ETTm2，每表 7 个通道）、Jena Climate（10 分钟，14 通道）、UCI Electricity（15 分钟，321 通道），加 8 条确定性合成序列。
 - 窗口：每条序列用最后 `context` 个点预测未来 64 点；多变量模式下同一时刻的 7 个通道一起 decode。
 - 协变量：最后一个通道为目标，其余通道为 past-only，sin/cos 日历特征为 past-future。
 - `nMAE`、`pinball` 按每条窗口上下文标准差归一化；`Δ` 为相对同窗口 fp32 的变化。
@@ -316,6 +365,7 @@ src/tfmlab/
   profile.py         GEMM 与端到端性能剖析
   parity.py          与 PyTorch 后端的数值对齐
   covariates.py      协变量输入下的量化与 KV
+  horizon.py         更长 horizon 下的量化与 KV
   predict.py         CSV 预测命令
   attention.py       注意力补丁
   runtime.py         加载、推理、计时、显存
@@ -336,6 +386,7 @@ tests/
 - KV 敏感度只覆盖 ETTh1 + synthetic 的 60 个窗口。第 19 层的结论在两种压缩模式下一致；混合 KV 的 −0.36% 幅度小于 1%，不应外推。
 - 多变量只测 ETT 的 7 通道同批；未覆盖变量数变化和变量子集。
 - 协变量只测 24 条目标序列；past-only 用其他 ETT 通道，past-future 用日历特征，未覆盖真实外生变量。
+- 跨域只取 Jena 与 Electricity 的前 8 个通道；horizon 探针只测 ETTh1、ctx 2,048。
 - PyTorch 对照只在 CPU 上跑，未验证 MPS 路径。
 - TimesFM 3.0 权重使用 non-commercial 许可证，本仓库不重新分发权重。
 

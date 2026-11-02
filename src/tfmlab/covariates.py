@@ -19,9 +19,8 @@ import mlx.core as mx
 import numpy as np
 
 from . import metrics
-from .attention import install_kv_scopes
+from .attention import install_kv_named
 from .data import build_covariate_windows, load_ett
-from .kv import make_scope_plans
 from .runtime import load_model, predict, predict_with_covariates, unload_model
 from .weights import apply_weight_spec, weight_specs
 
@@ -50,19 +49,6 @@ def _load(cfg: CovariateConfig):
     if not frames:
         raise ValueError("no covariate windows")
     return tuple(np.concatenate([f[i] for f in frames]) for i in range(5))
-
-
-def _install_kv(model, name: str):
-    plans = make_scope_plans(name, len(model.transformer_stack.layers), "both")
-    for scope, plan in plans:
-        for index, compressor in enumerate(plan):
-            assignments = (
-                {"seq": compressor, "var": compressor}
-                if scope == "both"
-                else {scope: compressor}
-            )
-            install_kv_scopes(model, [index], assignments)
-    return [compressor for _, plan in plans for compressor in plan]
 
 
 def _kv_bytes(model, compressors, cfg, contexts, past_only, past_future) -> tuple[int, int]:
@@ -119,7 +105,7 @@ def run(cfg: CovariateConfig) -> dict:
             apply_weight_spec(model, weight_specs([weight])[weight])
         compressors = []
         if kv_name is not None:
-            compressors = _install_kv(model, kv_name)
+            compressors = install_kv_named(model, kv_name)
             logical, fp16 = _kv_bytes(
                 model, compressors, cfg, contexts, past_only, past_future
             )

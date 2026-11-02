@@ -16,7 +16,7 @@ from mlx.utils import tree_flatten
 
 from . import metrics
 from .attention import install_kv_scopes
-from .data import SeriesSet, build_multi_windows, build_windows, load_ett, synthetic_set
+from .data import SeriesSet, build_multi_windows, build_windows, load_dataset, synthetic_set
 from .kv import KV_NAMES, make_scope_plans
 from .runtime import (
     env_info,
@@ -84,6 +84,8 @@ class RunConfig:
     # Group each time window's channels into one decode call, so variate
     # attention runs. Deltas stay relative to fp32 either way.
     multi: bool = False
+    # 0 keeps every channel; Jena/Electricity can carry hundreds.
+    max_channels: int = 0
     contexts: tuple[int, ...] = (512, 2048, 8192, 15360)
     horizon: int = 64
     windows: int = 6
@@ -170,7 +172,7 @@ class EvalData:
 def _load_data(cfg: RunConfig, contexts: tuple[int, ...]) -> tuple[dict[str, SeriesSet], dict[tuple[str, int], EvalData]]:
     sets: dict[str, SeriesSet] = {}
     for name in cfg.datasets:
-        sets[name] = load_ett(name, cfg.data_dir)
+        sets[name] = load_dataset(name, cfg.data_dir, cfg.max_channels)
     if cfg.synthetic:
         sets["synthetic"] = synthetic_set()
     eval_data: dict[tuple[str, int], EvalData] = {}

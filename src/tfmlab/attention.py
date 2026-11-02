@@ -18,7 +18,7 @@ import mlx.core as mx
 import timesfm3.mlx.transformer as tfm_transformer
 from timesfm3.mlx.transformer import rope
 
-from .kv import KVCompressor
+from .kv import KVCompressor, make_scope_plans
 
 _KV_ATTR = "_tfmlab_kv"
 _ORIGINAL = tfm_transformer.MultiHeadAttention.__call__
@@ -109,6 +109,20 @@ def install_kv_scopes(model, layers, assignments: dict[str, KVCompressor | None]
             if module is not None:
                 setattr(module, _KV_ATTR, assignments[part])
     model._compiled_forward = None
+
+
+def install_kv_named(model, name: str) -> list[KVCompressor]:
+    """Install a named KV mode, including per-scope plans. Returns its compressors."""
+    plans = make_scope_plans(name, len(model.transformer_stack.layers))
+    for scope, plan in plans:
+        for index, compressor in enumerate(plan):
+            assignments = (
+                {"seq": compressor, "var": compressor}
+                if scope == "both"
+                else {scope: compressor}
+            )
+            install_kv_scopes(model, [index], assignments)
+    return [compressor for _, plan in plans for compressor in plan]
 
 
 def patch_class() -> None:

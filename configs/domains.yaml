@@ -1,0 +1,15 @@
+# Domain coverage beyond ETT: Jena Climate (10 min) and UCI Electricity (15 min).
+# Channel count is capped so the grid stays comparable to ETT.
+datasets: [ETTh1, jena, electricity]
+synthetic: false
+max_channels: 8
+contexts: [512, 2048, 8192, 15360]
+windows: 4
+weights: [fp32, int8_g64, int4_g64, mix_l18_19_8]
+kv: [affine4, affine4_l19fp16]
+kv_contexts: [2048, 15360]
+throughput_contexts: [2048, 15360]
+throughput_batches: [1, 8]
+repeats: 2
+eval_batch: 16
+out: results/domains.json

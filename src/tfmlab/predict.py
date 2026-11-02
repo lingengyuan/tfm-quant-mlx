@@ -12,8 +12,7 @@ import dataclasses
 import numpy as np
 import pandas as pd
 
-from .attention import install_kv_scopes
-from .kv import make_scope_plans
+from .attention import install_kv_named
 from .runtime import load_model, predict, unload_model
 from .weights import apply_weight_spec, weight_specs
 
@@ -63,25 +62,13 @@ def format_forecast(name: str, pred: np.ndarray) -> pd.DataFrame:
     return frame
 
 
-def _install_kv(model, name: str) -> None:
-    plans = make_scope_plans(name, len(model.transformer_stack.layers))
-    for scope, plan in plans:
-        for index, compressor in enumerate(plan):
-            assignments = (
-                {"seq": compressor, "var": compressor}
-                if scope == "both"
-                else {scope: compressor}
-            )
-            install_kv_scopes(model, [index], assignments)
-
-
 def run(cfg: PredictConfig) -> pd.DataFrame:
     frame = pd.read_csv(cfg.input)
     series = series_from_frame(frame, cfg.context)
     model = load_model(cfg.checkpoint)
     apply_weight_spec(model, weight_specs([cfg.weights])[cfg.weights])
     if cfg.kv not in ("none", "off", ""):
-        _install_kv(model, cfg.kv)
+        install_kv_named(model, cfg.kv)
 
     outputs = []
     for name, values in series.items():

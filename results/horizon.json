@@ -1,0 +1,174 @@
+{
+  "created": "2026-11-02T17:13:09+0800",
+  "config": {
+    "checkpoint": "models/timesfm-3.0",
+    "data_dir": "data/raw",
+    "datasets": [
+      "ETTh1"
+    ],
+    "context": 2048,
+    "horizons": [
+      64,
+      256,
+      1024
+    ],
+    "windows": 4,
+    "batch": 16,
+    "repeats": 2,
+    "out": "results/horizon.json",
+    "md": "results/horizon.md"
+  },
+  "series": 28,
+  "rows": [
+    {
+      "horizon": 64,
+      "name": "fp32",
+      "pinball": 0.14923056960105896,
+      "pinball_delta_pct": 0.0,
+      "nmae_delta_pct": 0.0,
+      "crossing_rate": 0.0,
+      "latency_ms": 89.17208299681079
+    },
+    {
+      "horizon": 64,
+      "name": "int8_g64",
+      "pinball": 0.14916586875915527,
+      "pinball_delta_pct": -0.04335629226414706,
+      "nmae_delta_pct": -0.1935978812256362,
+      "crossing_rate": 0.0,
+      "latency_ms": 79.37383351963945
+    },
+    {
+      "horizon": 64,
+      "name": "int4_g64",
+      "pinball": 0.1614609658718109,
+      "pinball_delta_pct": 8.195637330506553,
+      "nmae_delta_pct": 8.501472175560545,
+      "crossing_rate": 0.10484095982142858,
+      "latency_ms": 77.86879148625303
+    },
+    {
+      "horizon": 64,
+      "name": "mix_l18_19_8",
+      "pinball": 0.15305215120315552,
+      "pinball_delta_pct": 2.5608570766116268,
+      "nmae_delta_pct": 2.780264120445279,
+      "crossing_rate": 0.0,
+      "latency_ms": 77.88697899377439
+    },
+    {
+      "horizon": 64,
+      "name": "affine4",
+      "pinball": 0.1516156792640686,
+      "pinball_delta_pct": 1.5982714998581085,
+      "nmae_delta_pct": 1.4925334994181843,
+      "crossing_rate": 0.0,
+      "latency_ms": 112.2754374955548
+    },
+    {
+      "horizon": 64,
+      "name": "_baseline",
+      "pinball": 0.14923056960105896
+    },
+    {
+      "horizon": 256,
+      "name": "fp32",
+      "pinball": 0.1914791315793991,
+      "pinball_delta_pct": 0.0,
+      "nmae_delta_pct": 0.0,
+      "crossing_rate": 0.0,
+      "latency_ms": 94.70779148978181
+    },
+    {
+      "horizon": 256,
+      "name": "int8_g64",
+      "pinball": 0.19137732684612274,
+      "pinball_delta_pct": -0.05316753446531725,
+      "nmae_delta_pct": -0.10757384555911327,
+      "crossing_rate": 0.0,
+      "latency_ms": 84.79931249166839
+    },
+    {
+      "horizon": 256,
+      "name": "int4_g64",
+      "pinball": 0.19982630014419556,
+      "pinball_delta_pct": 4.359309808826449,
+      "nmae_delta_pct": 3.5322799802101157,
+      "crossing_rate": 0.06570870535714286,
+      "latency_ms": 81.5577915054746
+    },
+    {
+      "horizon": 256,
+      "name": "mix_l18_19_8",
+      "pinball": 0.19241875410079956,
+      "pinball_delta_pct": 0.4907179772803732,
+      "nmae_delta_pct": 0.2141061823655027,
+      "crossing_rate": 0.0,
+      "latency_ms": 85.08724998682737
+    },
+    {
+      "horizon": 256,
+      "name": "affine4",
+      "pinball": 0.19533151388168335,
+      "pinball_delta_pct": 2.0119071308231855,
+      "nmae_delta_pct": 2.0733272105612155,
+      "crossing_rate": 0.0,
+      "latency_ms": 92.92485399055295
+    },
+    {
+      "horizon": 256,
+      "name": "_baseline",
+      "pinball": 0.1914791315793991
+    },
+    {
+      "horizon": 1024,
+      "name": "fp32",
+      "pinball": 0.283996045589447,
+      "pinball_delta_pct": 0.0,
+      "nmae_delta_pct": 0.0,
+      "crossing_rate": 0.0,
+      "latency_ms": 109.37112498504575
+    },
+    {
+      "horizon": 1024,
+      "name": "int8_g64",
+      "pinball": 0.2836536467075348,
+      "pinball_delta_pct": -0.12056466532890155,
+      "nmae_delta_pct": -0.11908914081509644,
+      "crossing_rate": 0.0,
+      "latency_ms": 112.1709375147475
+    },
+    {
+      "horizon": 1024,
+      "name": "int4_g64",
+      "pinball": 0.29243817925453186,
+      "pinball_delta_pct": 2.9726236671932518,
+      "nmae_delta_pct": 2.7412105485785245,
+      "crossing_rate": 0.03199114118303571,
+      "latency_ms": 108.4336874919245
+    },
+    {
+      "horizon": 1024,
+      "name": "mix_l18_19_8",
+      "pinball": 0.28184768557548523,
+      "pinball_delta_pct": -0.7564753267964597,
+      "nmae_delta_pct": -0.7353546247533578,
+      "crossing_rate": 0.0,
+      "latency_ms": 114.10993750905618
+    },
+    {
+      "horizon": 1024,
+      "name": "affine4",
+      "pinball": 0.2890698313713074,
+      "pinball_delta_pct": 1.7865691655422429,
+      "nmae_delta_pct": 2.1278557110923666,
+      "crossing_rate": 0.0,
+      "latency_ms": 113.19460449158214
+    },
+    {
+      "horizon": 1024,
+      "name": "_baseline",
+      "pinball": 0.283996045589447
+    }
+  ]
+}
