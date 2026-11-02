@@ -225,6 +225,15 @@ uv pip install -e .
 
 结果写入 `results/quick.json`，约 2 分钟。
 
+### 预测
+
+```bash
+.venv/bin/tfmq predict data.csv --context 2048 --horizon 64 \
+  --weights int8_g64 --kv affine4 -o forecasts.csv
+```
+
+每个数值列作为独立单变量序列，取最后 `context` 个有效值。输出列为 `series, step, point, q0.1 … q0.9`，分位按行排序。`--weights` 与 `--kv` 省略时用 fp32 和未压缩。
+
 ### 配置
 
 每个 YAML 字段的示例见 `configs/*.yaml`。
@@ -307,6 +316,7 @@ src/tfmlab/
   profile.py         GEMM 与端到端性能剖析
   parity.py          与 PyTorch 后端的数值对齐
   covariates.py      协变量输入下的量化与 KV
+  predict.py         CSV 预测命令
   attention.py       注意力补丁
   runtime.py         加载、推理、计时、显存
   metrics.py         点预测与分位数指标

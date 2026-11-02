@@ -151,6 +151,23 @@ def _cmd_covariates(args) -> int:
     return 0
 
 
+def _cmd_predict(args) -> int:
+    from .predict import PredictConfig, run as run_predict
+
+    run_predict(
+        PredictConfig(
+            input=args.input,
+            out=args.out,
+            checkpoint=args.checkpoint,
+            context=args.context,
+            horizon=args.horizon,
+            weights=args.weights,
+            kv=args.kv,
+        )
+    )
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="tfmq")
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -217,6 +234,16 @@ def main(argv: list[str] | None = None) -> int:
     cov_p.add_argument("--out", default="results/covariates.json")
     cov_p.add_argument("--md", default="results/covariates.md")
     cov_p.set_defaults(func=_cmd_covariates)
+
+    pred_p = sub.add_parser("predict", help="forecast a CSV with optional quantization")
+    pred_p.add_argument("input")
+    pred_p.add_argument("-o", "--out", default="forecasts.csv")
+    pred_p.add_argument("--checkpoint", default="models/timesfm-3.0")
+    pred_p.add_argument("--context", type=int, default=2048)
+    pred_p.add_argument("--horizon", type=int, default=64)
+    pred_p.add_argument("--weights", default="fp32")
+    pred_p.add_argument("--kv", default="none")
+    pred_p.set_defaults(func=_cmd_predict)
 
     args = parser.parse_args(argv)
     return args.func(args)
