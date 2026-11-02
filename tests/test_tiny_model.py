@@ -39,6 +39,20 @@ def test_pass_through_patch_matches_original_attention():
     np.testing.assert_array_equal(patched, reference)
 
 
+def test_fast_attention_matches_manual_attention():
+    from tfmlab.attention import install_kv
+    from tfmlab.kv import PassThroughKV
+
+    model = _model()
+    x = mx.array(_series(1)[None])
+    reference = np.array(model.decode(x, 64))
+    kv = PassThroughKV()
+    kv.fast = True
+    install_kv(model, kv)
+    fused = np.array(model.decode(x, 64))
+    assert np.abs(fused - reference).max() < 5e-4
+
+
 def test_multivariate_decode_builds_variate_attention_kv():
     from tfmlab.attention import install_kv
     from tfmlab.kv import make_kv

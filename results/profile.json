@@ -1,0 +1,76 @@
+{
+  "created": "2026-11-02T16:29:24+0800",
+  "config": {
+    "checkpoint": "models/timesfm-3.0",
+    "context": 15360,
+    "batch": 8,
+    "repeats": 3,
+    "out": "results/profile.json"
+  },
+  "gemm": [
+    {
+      "tokens": 482,
+      "dim": 1280,
+      "fp32_ms": 0.7073340239003301,
+      "int8_ms": 0.7989580044522882,
+      "int4_ms": 0.772083003539592
+    },
+    {
+      "tokens": 15424,
+      "dim": 1280,
+      "fp32_ms": 5.976916989311576,
+      "int8_ms": 5.845375009812415,
+      "int4_ms": 5.693458020687103
+    }
+  ],
+  "e2e": [
+    {
+      "name": "fp32",
+      "latency_ms_p50": 626.8128749798052,
+      "series_per_s": 12.76297970149025,
+      "peak_mb": 2774.403855
+    },
+    {
+      "name": "int8_g64",
+      "latency_ms_p50": 599.8287500115111,
+      "series_per_s": 13.33713997511202,
+      "peak_mb": 1881.781015
+    },
+    {
+      "name": "int4_g64",
+      "latency_ms_p50": 594.8271670204122,
+      "series_per_s": 13.449284840289534,
+      "peak_mb": 1716.892559
+    },
+    {
+      "name": "fp16",
+      "latency_ms_p50": 637.1281250030734,
+      "series_per_s": 12.556344141865358,
+      "peak_mb": 2207.976085
+    },
+    {
+      "name": "fp16_compute",
+      "latency_ms_p50": 639.4489170052111,
+      "series_per_s": 12.510772615687776,
+      "peak_mb": 2207.976085
+    },
+    {
+      "name": "sdpa",
+      "latency_ms_p50": 575.3337499918416,
+      "series_per_s": 13.904972548739652,
+      "peak_mb": 2701.924887
+    },
+    {
+      "name": "affine4",
+      "latency_ms_p50": 674.7176249918994,
+      "series_per_s": 11.856811951660589,
+      "peak_mb": 2846.018319
+    },
+    {
+      "name": "affine4_sdpa",
+      "latency_ms_p50": 600.6012079888023,
+      "series_per_s": 13.319986529479563,
+      "peak_mb": 2778.159903
+    }
+  ]
+}

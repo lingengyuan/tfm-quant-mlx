@@ -57,11 +57,17 @@ def _attention_with_kv(self, x: mx.array, patch_mask: mx.array) -> mx.array:
         attend = (qi >= ki) & kv_valid
     else:
         attend = mx.broadcast_to(kv_valid, (b, 1, n, n))
-    bias = mx.where(attend, 0.0, -1e9)
-    q = q * math.sqrt(hd)
-    logits = (q @ k.transpose(0, 1, 3, 2)) + bias
-    w = mx.softmax(logits, axis=-1)
-    out = w @ v
+    if kv.fast:
+        # Fused kernel; softmax still runs in fp32 inside MLX.
+        out = mx.fast.scaled_dot_product_attention(
+            q, k, v, scale=math.sqrt(hd), mask=attend
+        )
+    else:
+        bias = mx.where(attend, 0.0, -1e9)
+        q = q * math.sqrt(hd)
+        logits = (q @ k.transpose(0, 1, 3, 2)) + bias
+        w = mx.softmax(logits, axis=-1)
+        out = w @ v
     out = out.transpose(0, 2, 1, 3).reshape(b, n, h * hd)
     return self.out_proj(out)
 

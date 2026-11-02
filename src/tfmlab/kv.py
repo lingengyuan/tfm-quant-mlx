@@ -114,6 +114,8 @@ class KVCompressor:
     # indices; the reader still sees the other heads at full precision, which is
     # how a mixed KV policy is expressed.
     heads: tuple[int, ...] | None = None
+    # Use the fused MLX attention kernel after decompression.
+    fast: bool = False
 
     def __init__(self) -> None:
         self.stats = KVStats([])

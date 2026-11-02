@@ -20,7 +20,7 @@
 - KV 误差集中在末层：保留第 19 层 fp16、其余 19 层 `affine4`，pinball **−0.36%**（全量 affine4 为 +0.52%），逻辑 KV 137 MB（2.88×），点预测偏移 0.038 → 0.024。`turbo3_mse` 同样从 +2.71% 降到 +0.69%，95 MB（4.14×）。逐头误差分散，单头最大 +0.24%（affine4）/ +0.49%（turbo3），没有单头主导。
 - 权重 + KV 组合：`mix_l18_19_8 + affine4_l19fp16` 的 pinball +0.82%，权重 227 MB、KV 137 MB、峰值 1755 MB（fp32 为 2774 MB）。误差大多接近两块相加，`+affine4` 组合为 +1.69%，比线性和高 0.37 pp。
 - 多变量输入（ETT 7 通道同批）：fp32 pinball 0.1152，略优于单变量 0.1168；权重量化损失基本不变；**KV 压缩损失放大约 6 倍**（affine4 +5.51% vs +0.91%）。误差主要来自 variate attention（只压 var +3.38%）；按 scope 混合、seq 用 affine4、var 用 affine8 后降到 +1.15%，KV 2418 MB（2.29×）。
-- 权重量化不提速：15,360 上下文、batch 32 全部在 8–13 series/s（多次运行有 3–5 series/s 波动）。长上下文由注意力/softmax 支配，且 fp16/bf16 的部分算子自动升 fp32。
+- 权重量化不提速，原因已定位：MLX 已用 `nn.QuantizedLinear`（`mx.quantized_matmul`），但模型规模的 GEMM（482 token）int4 反而慢 9%，只有 15,424 token 时快 4.7%。端到端 8 个配置差异 ≤8%；量化的收益在显存（2774 → 1717 MB）。
 - 峰值显存随权重下降（15,360：2774 → 1717 MB int4），但不随 KV 压缩下降；纯 MLX 会把 K/V 解码回 fp32 再算注意力。
 
 选择建议：
@@ -58,6 +58,33 @@
 | mix_top3_8 | 235 | 5.62× | 0.1269 | +0.66% | 0.68 | 1743 |
 
 混合配置：其余层 4-bit；`mix_l19_8` 把第 19 层和输入残差块留 8-bit，`mix_l18_19_8` 再留第 18 层，`mix_top3_8` 再留第 3 层。输出头始终 fp32。
+
+### 为什么量化不提速（上下文 15,360）
+
+MLX 的 `nn.quantize` 把 Linear 换成 `nn.QuantizedLinear`，矩阵乘走 `mx.quantized_matmul`，不是缺 kernel。问题在 shape：
+
+| tokens | fp32 ms | int8 ms | int4 ms |
+|---|---|---|---|
+| 482（模型单层实际） | 0.71 | 0.80 | 0.77 |
+| 15,424（大 batch） | 5.98 | 5.85 | 5.69 |
+
+模型规模下 int4 反而慢 9%，只有大 batch 才快 4.7%。端到端（ctx 15,360，batch 8）：
+
+| 模式 | ms | series/s | peak MB |
+|---|---|---|---|
+| fp32 | 626.8 | 12.8 | 2774 |
+| int8_g64 | 599.8 | 13.3 | 1882 |
+| int4_g64 | 594.8 | 13.4 | 1717 |
+| fp16 | 637.1 | 12.6 | 2208 |
+| fp16 权重 + fp16 计算 | 639.4 | 12.5 | 2208 |
+| sdpa（无 KV 压缩） | 575.3 | 13.9 | 2702 |
+| affine4 | 674.7 | 11.9 | 2846 |
+| affine4 + sdpa | 600.6 | 13.3 | 2778 |
+
+- 端到端差异都在 8% 以内。受控 A/B 复测融合注意力为 3.4%（109.6 → 105.9 ms，batch 1），不是 8%。
+- KV affine4 的解码开销让端到端慢 7.6%（674.7 vs 626.8 ms）；换成融合注意力后 600.6 ms，比 fp32 快 4%。峰值显存仍与 fp32 持平。
+- 在这个后端和硬件上，4-bit 的价值是显存，不是吞吐。KV 压缩要提速需要“解压 + 注意力”融合的自定义 kernel；本仓库没有实现。
+- `tfmq profile` 复现上表，输出 `results/profile.json`。
 
 ### 逐层 4-bit 敏感度（上下文 2,048）
 
@@ -237,6 +264,7 @@ uv pip install -e .
 .venv/bin/tfmq kv-sensitivity --kv affine4
 .venv/bin/tfmq kv-sensitivity --kv turbo3_mse \
   --out results/kv_sensitivity_turbo3.json --md results/kv_sensitivity_turbo3.md
+.venv/bin/tfmq profile
 ```
 
 自检：
@@ -255,6 +283,7 @@ src/tfmlab/
   sensitivity.py 逐层 4-bit 敏感度
   kv.py          affine、PolarQuant、QJL KV 压缩
   kv_sensitivity.py KV 逐层/逐头敏感度
+  profile.py    GEMM 与端到端性能剖析
   attention.py   注意力补丁
   runtime.py     加载、推理、计时、显存
   metrics.py     点预测与分位数指标

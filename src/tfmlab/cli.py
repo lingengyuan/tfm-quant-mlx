@@ -102,6 +102,21 @@ def _cmd_kv_sensitivity(args) -> int:
     return 0
 
 
+def _cmd_profile(args) -> int:
+    from .profile import ProfileConfig, run as run_profile
+
+    run_profile(
+        ProfileConfig(
+            checkpoint=args.checkpoint,
+            context=args.context,
+            batch=args.batch,
+            repeats=args.repeats,
+            out=args.out,
+        )
+    )
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="tfmq")
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -140,6 +155,14 @@ def main(argv: list[str] | None = None) -> int:
     kvs_p.add_argument("--out", default="results/kv_sensitivity.json")
     kvs_p.add_argument("--md", default="results/kv_sensitivity.md")
     kvs_p.set_defaults(func=_cmd_kv_sensitivity)
+
+    prof_p = sub.add_parser("profile", help="GEMM and end-to-end latency profile")
+    prof_p.add_argument("--checkpoint", default="models/timesfm-3.0")
+    prof_p.add_argument("--context", type=int, default=15360)
+    prof_p.add_argument("--batch", type=int, default=8)
+    prof_p.add_argument("--repeats", type=int, default=3)
+    prof_p.add_argument("--out", default="results/profile.json")
+    prof_p.set_defaults(func=_cmd_profile)
 
     args = parser.parse_args(argv)
     return args.func(args)
