@@ -53,6 +53,21 @@ def test_install_kv_restricts_layers_and_scope():
     assert getattr(layers[3].var_attn, _KV_ATTR, None) is None
 
 
+def test_install_kv_scopes_leaves_other_scope_intact():
+    from tfmlab.attention import _KV_ATTR, install_kv_scopes
+    from tfmlab.kv import make_kv
+    from tfmlab.runtime import load_model
+
+    model = load_model(CHECKPOINT)
+    kv_seq = make_kv("affine4")
+    kv_var = make_kv("affine8")
+    install_kv_scopes(model, [2], {"seq": kv_seq})
+    install_kv_scopes(model, [2], {"var": kv_var})
+    layer = model.transformer_stack.layers[2]
+    assert getattr(layer.seq_attn, _KV_ATTR) is kv_seq
+    assert getattr(layer.var_attn, _KV_ATTR) is kv_var
+
+
 def test_multivariate_decode_builds_variate_attention_kv():
     from tfmlab.attention import install_kv
     from tfmlab.kv import make_kv

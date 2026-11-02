@@ -318,9 +318,17 @@ def make_kv(name: str) -> KVCompressor | None:
         return TurboKV(3, "prod")
     if name == "qjl1":
         return QJLKV()
-    if name in KV_LAYER_PLANS:
+    if name in KV_LAYER_PLANS or name in KV_SCOPE_PLANS:
         raise ValueError(f"mixed KV mode needs make_kv_plan: {name}")
     raise ValueError(f"unknown KV compressor: {name}")
+
+
+# Modes that use different compressors per attention scope. The runner installs
+# each plan on its own scope and sums bytes across both.
+KV_SCOPE_PLANS: dict[str, dict[str, str | None]] = {
+    "affine4_seq_var8": {"seq": "affine4", "var": "affine8"},
+    "affine4_seq_varfp16": {"seq": "affine4", "var": None},
+}
 
 
 # Base mode for every layer plus per-layer overrides; ``None`` keeps that layer
@@ -341,8 +349,22 @@ def make_kv_plan(name: str, layers: int) -> list[KVCompressor]:
     plan = []
     for index in range(layers):
         spec = overrides.get(index, base)
-        plan.append(PassThroughKV() if spec is None else make_kv(spec))
+        plan.append(PassThroughKV() if spec in (None, "none") else make_kv(spec))
     return plan
+
+
+def make_scope_plans(
+    name: str, layers: int, scope: str = "both"
+) -> list[tuple[str, list[KVCompressor]]]:
+    """Per-scope compressor plans. Normal modes reuse one plan for ``scope``."""
+    if name in KV_SCOPE_PLANS:
+        if scope != "both":
+            raise ValueError(f"{name} fixes its own scopes; drop kv_scopes")
+        return [
+            (part, make_kv_plan(mode or "none", layers))
+            for part, mode in KV_SCOPE_PLANS[name].items()
+        ]
+    return [(scope, make_kv_plan(name, layers))]
 
 
 KV_NAMES = (
@@ -354,4 +376,5 @@ KV_NAMES = (
     "turbo3_prod",
     "qjl1",
     *KV_LAYER_PLANS,
+    *KV_SCOPE_PLANS,
 )

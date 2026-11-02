@@ -85,6 +85,26 @@ def install_kv(model, kv: KVCompressor | None, scope: str = "both", layers=None)
     model._compiled_forward = None
 
 
+def install_kv_scopes(model, layers, assignments: dict[str, KVCompressor | None]) -> None:
+    """Set compressors for the given scopes only; other scopes stay untouched.
+
+    ``install_kv`` clears the scope it is not installing, which would undo a
+    per-scope plan that keeps sequence and variate attention on different
+    compressors.
+    """
+    blocks = model.transformer_stack.layers
+    indices = range(len(blocks)) if layers is None else layers
+    for index in indices:
+        layer = blocks[index]
+        for attr, part in (("seq_attn", "seq"), ("var_attn", "var")):
+            if part not in assignments:
+                continue
+            module = getattr(layer, attr, None)
+            if module is not None:
+                setattr(module, _KV_ATTR, assignments[part])
+    model._compiled_forward = None
+
+
 def patch_class() -> None:
     tfm_transformer.MultiHeadAttention.__call__ = _attention_with_kv
 

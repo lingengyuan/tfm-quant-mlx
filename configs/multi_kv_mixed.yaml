@@ -1,0 +1,15 @@
+# Multivariate KV policy: compress sequence attention harder than variate
+# attention, which the multi_scope ablation showed to be the sensitive one.
+datasets: [ETTh1, ETTh2, ETTm1, ETTm2]
+synthetic: false
+multi: true
+contexts: [15360]
+windows: 4
+weights: [fp32]
+kv: [affine4, affine4_seq_var8, affine4_seq_varfp16, turbo3_mse]
+kv_contexts: [15360]
+throughput_contexts: [15360]
+throughput_batches: [1]
+repeats: 2
+eval_batch: 32
+out: results/multi_kv_mixed.json

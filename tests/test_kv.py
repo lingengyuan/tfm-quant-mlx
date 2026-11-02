@@ -3,7 +3,7 @@ import pytest
 
 mx = pytest.importorskip("mlx.core")
 
-from tfmlab.kv import PassThroughKV, make_kv, make_kv_plan
+from tfmlab.kv import AffineKV, PassThroughKV, make_kv, make_kv_plan, make_scope_plans
 
 
 @pytest.mark.parametrize(
@@ -88,3 +88,16 @@ def test_layer_plan_keeps_last_layer_fp16():
 def test_mixed_kv_name_needs_a_plan():
     with pytest.raises(ValueError):
         make_kv("affine4_l19fp16")
+
+
+def test_scope_plan_splits_attention_modes():
+    plans = make_scope_plans("affine4_seq_var8", 20)
+    assert [scope for scope, _ in plans] == ["seq", "var"]
+    assert all(isinstance(kv, AffineKV) and kv.bits == 4 for kv in plans[0][1])
+    assert all(isinstance(kv, AffineKV) and kv.bits == 8 for kv in plans[1][1])
+
+    pass_through = make_scope_plans("affine4_seq_varfp16", 20)[1][1]
+    assert all(isinstance(kv, PassThroughKV) for kv in pass_through)
+
+    single = make_scope_plans("affine4", 20, "seq")
+    assert [scope for scope, _ in single] == ["seq"]

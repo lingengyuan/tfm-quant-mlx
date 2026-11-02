@@ -15,9 +15,9 @@ import numpy as np
 from mlx.utils import tree_flatten
 
 from . import metrics
-from .attention import install_kv
+from .attention import install_kv_scopes
 from .data import SeriesSet, build_multi_windows, build_windows, load_ett, synthetic_set
-from .kv import KV_NAMES, make_kv_plan
+from .kv import KV_NAMES, make_scope_plans
 from .runtime import (
     env_info,
     load_model,
@@ -297,14 +297,21 @@ def _kv_run(
 ) -> dict:
     model = load_model(cfg.checkpoint)
     apply_weight_spec(model, weight_spec)
-    plan = make_kv_plan(name, len(model.transformer_stack.layers))
-    for index, compressor in enumerate(plan):
-        install_kv(model, compressor, scope=scope, layers=[index])
+    plans = make_scope_plans(name, len(model.transformer_stack.layers), scope)
+    for plan_scope, plan in plans:
+        for index, compressor in enumerate(plan):
+            assignments = (
+                {"seq": compressor, "var": compressor}
+                if plan_scope == "both"
+                else {plan_scope: compressor}
+            )
+            install_kv_scopes(model, [index], assignments)
 
     # The first forward at the probe shape traces the compiled graph and records
     # every K/V tensor shape. Later calls at the same shape reuse the graph.
     probe_context = max(contexts)
-    for compressor in plan:
+    compressors = [compressor for _, plan in plans for compressor in plan]
+    for compressor in compressors:
         compressor.stats.reset()
     probe = np.sin(np.linspace(0.0, 40.0, probe_context, dtype=np.float32))
     if variates > 1:
@@ -314,14 +321,16 @@ def _kv_run(
         probe_batch = np.stack([probe] * cfg.mem_batch)
         probe_input = mx.array(probe_batch)[:, None, :]
     mx.eval(model.decode(probe_input, cfg.horizon))
-    logical = sum(compressor.logical_bytes() for compressor in plan)
-    fp16 = sum(compressor.fp16_bytes() for compressor in plan)
-    probe_calls = sum(len(compressor.stats.calls) for compressor in plan)
+    logical = sum(compressor.logical_bytes() for compressor in compressors)
+    fp16 = sum(compressor.fp16_bytes() for compressor in compressors)
+    probe_calls = sum(len(compressor.stats.calls) for compressor in compressors)
     values = sum(
-        math.prod(shape) for compressor in plan for _, shape in compressor.stats.calls
+        math.prod(shape)
+        for compressor in compressors
+        for _, shape in compressor.stats.calls
     )
-    mixed = len({compressor.bits_k for compressor in plan}) > 1 or len(
-        {compressor.bits_v for compressor in plan}
+    mixed = len({compressor.bits_k for compressor in compressors}) > 1 or len(
+        {compressor.bits_v for compressor in compressors}
     ) > 1
     bits = logical * 8.0 / values if values else 0.0
     bits_k = bits if mixed else plan[0].bits_k
