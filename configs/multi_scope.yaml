@@ -1,0 +1,16 @@
+# Ablation for the multivariate KV error: compress sequence attention only,
+# then variate attention only. Same windows as configs/multi.yaml.
+datasets: [ETTh1, ETTh2, ETTm1, ETTm2]
+synthetic: false
+multi: true
+contexts: [15360]
+windows: 4
+weights: [fp32]
+kv: [affine4, turbo3_mse]
+kv_scopes: [seq, var]
+kv_contexts: [15360]
+throughput_contexts: [15360]
+throughput_batches: [1]
+repeats: 1
+eval_batch: 32
+out: results/multi_scope.json

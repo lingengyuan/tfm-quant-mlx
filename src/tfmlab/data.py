@@ -146,6 +146,47 @@ def build_windows(
     )
 
 
+def build_multi_windows(
+    series_set: SeriesSet,
+    context: int,
+    horizon: int,
+    num_windows: int,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, list[int]] | None:
+    """Keep variates of the same time span in one window.
+
+    Returns ``(contexts, targets, scales, channels)`` with shapes
+    ``(W, V, context)``, ``(W, V, horizon)`` and ``(W, V)``. One decoder call
+    then mixes all variates through variate attention.
+    """
+    min_len = context + horizon
+    usable = [i for i, s in enumerate(series_set.series) if len(s) >= min_len]
+    if len(usable) < 2:
+        return None
+    length = min(len(series_set.series[i]) for i in usable)
+    first_end = context
+    last_end = length - horizon
+    count = max(1, min(num_windows, (last_end - first_end) // max(1, horizon) + 1))
+    ends = np.linspace(first_end, last_end, count).astype(int)
+
+    contexts, targets, scales = [], [], []
+    for end in ends:
+        ctx = np.stack([series_set.series[ch][end - context : end] for ch in usable])
+        tgt = np.stack([series_set.series[ch][end : end + horizon] for ch in usable])
+        if not np.isfinite(ctx).all() or not np.isfinite(tgt).all():
+            continue
+        contexts.append(ctx)
+        targets.append(tgt)
+        scales.append(np.maximum(np.std(ctx, axis=1), 1e-6))
+    if not contexts:
+        return None
+    return (
+        np.stack(contexts).astype(np.float32),
+        np.stack(targets).astype(np.float32),
+        np.stack(scales).astype(np.float32),
+        usable,
+    )
+
+
 def eval_windows(
     data_dir: str,
     datasets: tuple[str, ...],

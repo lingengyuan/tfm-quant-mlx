@@ -32,20 +32,32 @@ def unload_model(model) -> None:
 
 
 def predict(model, contexts: np.ndarray, horizon: int, batch_size: int) -> np.ndarray:
-    """Decode ``(N, context)`` series in chunks. Returns ``(N, horizon, 9)``."""
+    """Decode ``(N, context)`` or ``(N, variates, context)`` series in chunks.
+
+    Returns ``(N, horizon, 9)`` or ``(N, variates, horizon, 9)`` to match the
+    input shape.
+    """
     outputs = []
+    multi = contexts.ndim == 3
     for start in range(0, len(contexts), batch_size):
         chunk = np.asarray(contexts[start : start + batch_size], dtype=np.float32)
-        out = model.decode(mx.array(chunk)[:, None, :], horizon)
+        x = mx.array(chunk)
+        if not multi:
+            x = x[:, None, :]
+        out = model.decode(x, horizon)
         mx.eval(out)
-        outputs.append(np.array(out)[:, 0])
+        arr = np.array(out)
+        outputs.append(arr if multi else arr[:, 0])
     return np.concatenate(outputs, axis=0)
 
 
-def _input(batch: int, context: int) -> mx.array:
+def _input(batch: int, context: int, variates: int = 1) -> mx.array:
     base = np.sin(np.linspace(0.0, 40.0, context, dtype=np.float32))
     ramp = np.linspace(-1.0, 1.0, context, dtype=np.float32)
     rows = np.stack([base + 0.1 * ramp * (i % 5) for i in range(batch)])
+    if variates > 1:
+        rows = np.stack([rows + 0.05 * j for j in range(variates)], axis=1)
+        return mx.array(rows)
     return mx.array(rows)[:, None, :]
 
 
@@ -56,8 +68,9 @@ def measure_latency(
     horizon: int = HORIZON,
     repeats: int = 3,
     warmup: int = 2,
+    variates: int = 1,
 ) -> dict:
-    x = _input(batch, context)
+    x = _input(batch, context, variates)
     for _ in range(warmup):
         mx.eval(model.decode(x, horizon))
     times = []
@@ -69,14 +82,17 @@ def measure_latency(
     return {
         "batch": batch,
         "context": context,
+        "variates": variates,
         "latency_ms_p50": float(np.median(times) * 1000.0),
         "latency_ms_p95": float(np.percentile(times, 95) * 1000.0),
-        "series_per_s": float(batch / np.median(times)),
+        "series_per_s": float(batch * variates / np.median(times)),
     }
 
 
-def measure_peak_memory(model, batch: int, context: int, horizon: int = HORIZON) -> dict:
-    x = _input(batch, context)
+def measure_peak_memory(
+    model, batch: int, context: int, horizon: int = HORIZON, variates: int = 1
+) -> dict:
+    x = _input(batch, context, variates)
     mx.eval(model.decode(x, horizon))
     gc.collect()
     mx.clear_cache()
@@ -87,6 +103,7 @@ def measure_peak_memory(model, batch: int, context: int, horizon: int = HORIZON)
     return {
         "batch": batch,
         "context": context,
+        "variates": variates,
         "peak_mb": peak / 1e6,
         "resident_mb": base / 1e6,
         "activation_mb": (peak - base) / 1e6,

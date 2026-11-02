@@ -19,6 +19,7 @@
 - KV `affine8`：逻辑 K/V 395 → 222 MB（1.78×），pinball −0.01%；`affine4` 123 MB（3.20×），+0.52%；`turbo3_mse` 80 MB（4.96×），+2.71%；1-bit QJL 只压 K，pinball +73%，不可用。
 - KV 误差集中在末层：保留第 19 层 fp16、其余 19 层 `affine4`，pinball **−0.36%**（全量 affine4 为 +0.52%），逻辑 KV 137 MB（2.88×），点预测偏移 0.038 → 0.024。`turbo3_mse` 同样从 +2.71% 降到 +0.69%，95 MB（4.14×）。逐头误差分散，单头最大 +0.24%（affine4）/ +0.49%（turbo3），没有单头主导。
 - 权重 + KV 组合：`mix_l18_19_8 + affine4_l19fp16` 的 pinball +0.82%，权重 227 MB、KV 137 MB、峰值 1755 MB（fp32 为 2774 MB）。误差大多接近两块相加，`+affine4` 组合为 +1.69%，比线性和高 0.37 pp。
+- 多变量输入（ETT 7 通道同批）：fp32 pinball 0.1152，略优于单变量 0.1168；权重量化损失基本不变；**KV 压缩损失放大约 6 倍**（affine4 +5.51% vs +0.91%）。拆分后误差主要来自 variate attention：只压 var 为 +3.38%，只压 seq 为 +0.92%。
 - 权重量化不提速：15,360 上下文、batch 32 全部在 8–13 series/s（多次运行有 3–5 series/s 波动）。长上下文由注意力/softmax 支配，且 fp16/bf16 的部分算子自动升 fp32。
 - 峰值显存随权重下降（15,360：2774 → 1717 MB int4），但不随 KV 压缩下降；纯 MLX 会把 K/V 解码回 fp32 再算注意力。
 
@@ -130,6 +131,27 @@
 
 完整表格见 [`results/combo_report.md`](results/combo_report.md)。
 
+### 多变量输入（上下文 15,360）
+
+ETT 每张表的 7 个通道属于同一时间跨度，作为 7 个 variate 进入一次 decode，经 variate attention 混合。对照组用同一批窗口逐通道单独 decode。两组都是 4 个 ETT、每条序列 4 个窗口，共 112 条序列。
+
+| 配置 | 单变量 Δpinball | 多变量 Δpinball |
+|---|---|---|
+| fp32 pinball | 0.1168 | 0.1152 |
+| int8_g64 | +0.16% | +0.21% |
+| int4_g64 | +12.37% | +12.91% |
+| mix_l18_19_8 | +0.97% | +1.55% |
+| KV affine4 | +0.91% | +5.51% |
+| KV affine4_l19fp16 | +0.06% | +0.53% |
+| KV turbo3_mse | +1.68% | +11.16% |
+
+- 多变量的点预测略好：pinball 0.1152 vs 0.1168，nMAE 0.2916 vs 0.2936。覆盖率误差反而变差：0.069 vs 0.063。
+- 权重量化在两种模式下接近，差异不超过 0.6 pp。
+- KV 压缩在多变量下损失放大约 6 倍。拆分注意力后：只压序列注意力 affine4 +0.92%、turbo3 +1.49%，与单变量一致；只压 variate 注意力 affine4 +3.38%、turbo3 +6.92%。误差主要来自 variate attention。
+- 多变量探针含 7 个 variate 且统计两种注意力，逻辑字节约为单变量表的 14 倍（affine4 1727 MB）。比较 reduction，不要比较绝对值。
+
+完整表格：[`results/multi_report.md`](results/multi_report.md)、[`results/uni_control_report.md`](results/uni_control_report.md)、[`results/multi_scope_report.md`](results/multi_scope_report.md)。
+
 ## 实验设计
 
 ### 数据
@@ -137,6 +159,7 @@
 - ETT-small：ETTh1、ETTh2、ETTm1、ETTm2，每张表 7 个真实通道。
 - 合成数据：8 条确定性序列，覆盖趋势+季节、多周期、AR(1)、随机游走、机制切换、尖峰、异方差、方波。
 - 滚动起点窗口：每条序列用最后 `context` 个点预测未来 64 点；同一时间跨度的窗口共用，通道一起成批推理。
+- 多变量：ETT 一张表的 7 个通道作为同一窗口的 7 个 variate，一次 decode 经 variate attention 混合；`configs/multi.yaml` 与 `configs/uni_control.yaml` 使用同一批窗口。
 
 ### 指标
 
@@ -166,6 +189,7 @@ TimesFM 3.0 的 MLX 后端是单次全序列前向，没有跨调用 KV cache。
 - `qjl1`：1-bit sign 估计，只压 K，V 保持 fp16。
 - `affine4_l19fp16` / `turbo3_l19fp16`：每层单独挂压缩器，前 19 层用基模式，第 19 层直通（fp16）。字节按层统计后求和，据此换算平均 bit/值。
 - 组合网格：`kv_weights` 列出与 KV 网格配对的权重配置。每个组合单独加载模型，先套权重 spec 再挂 KV；结果名记为 `权重+KV`，Δ 仍相对 fp32。
+- `kv_scopes`：`seq` / `var` / `both`，用于拆分序列与 variate 注意力的压缩误差。
 
 压缩后先解码再参与注意力。纯 MLX 没有融合 kernel，因此逻辑 K/V 明显变小，但运行时峰值显存不一定下降。
 
@@ -190,6 +214,9 @@ uv pip install -e .
 .venv/bin/tfmq run --config configs/full.yaml --out results/full.json
 .venv/bin/tfmq run --config configs/mixed.yaml
 .venv/bin/tfmq run --config configs/combo.yaml
+.venv/bin/tfmq run --config configs/multi.yaml
+.venv/bin/tfmq run --config configs/uni_control.yaml
+.venv/bin/tfmq run --config configs/multi_scope.yaml
 # KV 子集：只跑 4 个 KV 模式
 .venv/bin/tfmq run --config configs/kv_mixed.yaml
 .venv/bin/tfmq sensitivity
@@ -219,7 +246,7 @@ src/tfmlab/
   metrics.py     点预测与分位数指标
   runner.py      网格执行
   report.py      Markdown 报告
-configs/         full / quick / mixed / kv_mixed / combo 网格
+configs/         full / quick / mixed / kv_mixed / combo / multi 等网格
 results/         JSON、报告、敏感度表
 tests/
 ```
@@ -231,6 +258,7 @@ tests/
 - 权重 `fp16/bf16` 在部分算子中自动升到 fp32（RoPE、running stats），因此实际算力收益小于权重体积收益。
 - KV 压缩没有融合 kernel，解码开销计入吞吐；峰值显存下降需要自定义 Metal kernel。
 - KV 敏感度只覆盖 ETTh1 + synthetic 的 60 个窗口、ctx 15,360。第 19 层的结论在两种压缩模式下一致；混合 KV 的 −0.36% 在完整网格上复现，但幅度小于 1%，不应外推为通用增益。
+- 多变量只测 ETT 的 7 通道同批；未覆盖变量数变化、变量子集和协变量输入。
 - TimesFM 3.0 权重使用 non-commercial 许可证，本仓库不重新分发权重。
 
 ## 许可证

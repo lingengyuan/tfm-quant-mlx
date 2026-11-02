@@ -1,0 +1,15 @@
+# Univariate control for configs/multi.yaml: same windows and configs, but each
+# channel is decoded separately.
+datasets: [ETTh1, ETTh2, ETTm1, ETTm2]
+synthetic: false
+multi: false
+contexts: [2048, 15360]
+windows: 4
+weights: [fp32, int8_g64, int4_g64, mix_l18_19_8]
+kv: [affine4, affine4_l19fp16, turbo3_mse]
+kv_contexts: [2048, 15360]
+throughput_contexts: [2048, 15360]
+throughput_batches: [1, 8]
+repeats: 3
+eval_batch: 32
+out: results/uni_control.json

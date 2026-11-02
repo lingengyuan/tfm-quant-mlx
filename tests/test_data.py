@@ -1,6 +1,6 @@
 import numpy as np
 
-from tfmlab.data import build_windows, eval_windows, synthetic_set
+from tfmlab.data import build_multi_windows, build_windows, eval_windows, synthetic_set
 
 
 def test_window_shapes_and_targets():
@@ -34,3 +34,14 @@ def test_eval_windows_stacks_synthetic_sets():
     assert contexts.shape[1] == 512
     assert targets.shape[1] == 64
     assert len(contexts) == len(targets) == len(scales) == 16
+
+
+def test_multi_windows_keep_variates_together():
+    series_set = synthetic_set(length=4000)
+    out = build_multi_windows(series_set, 512, 64, 2)
+    assert out is not None
+    contexts, targets, scales, channels = out
+    assert contexts.shape == (2, len(channels), 512)
+    assert targets.shape == (2, len(channels), 64)
+    assert scales.shape == (2, len(channels))
+    assert (scales > 0).all()

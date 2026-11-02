@@ -367,6 +367,11 @@ def generate(path: str) -> str:
             "- turbo 模式在长上下文只测到 batch 8。",
             "- 压缩后 K/V 会解码回 fp32 再参与注意力，因此本次测量中峰值显存没有随逻辑 K/V 下降。",
         ]
+    if cfg.get("multi"):
+        notes.append(
+            "- 多变量网格每次 decode 含该数据集全部通道（ETT 为 7 个 variate），"
+            "KV 字节按全部 variate 统计，绝对值不能与单变量表直接比较。"
+        )
     parts += notes
     return "\n".join(parts) + "\n"
 

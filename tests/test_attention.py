@@ -51,3 +51,26 @@ def test_install_kv_restricts_layers_and_scope():
     assert getattr(layers[3].seq_attn, _KV_ATTR, None) is kv
     assert getattr(layers[2].seq_attn, _KV_ATTR, None) is None
     assert getattr(layers[3].var_attn, _KV_ATTR, None) is None
+
+
+def test_multivariate_decode_builds_variate_attention_kv():
+    from tfmlab.attention import install_kv
+    from tfmlab.kv import make_kv
+    from tfmlab.runtime import load_model, predict
+
+    model = load_model(CHECKPOINT)
+    kv = make_kv("affine8")
+    install_kv(model, kv)
+    series = np.sin(np.linspace(0, 40, 3 * 256, dtype=np.float32)).reshape(3, 256)
+    x = mx.array(series[None])
+    out = np.array(model.decode(x, 64))
+    assert out.shape == (1, 3, 64, 9)
+    assert np.isfinite(out).all()
+    shapes = {shape for _, shape in kv.stats.calls}
+    # Sequence attention folds variates into the batch axis; variate attention
+    # uses patches as the batch axis and the variates as the sequence.
+    assert any(shape[0] == 3 and shape[1] > 1 for shape in shapes)
+    assert any(shape[1] == 3 and shape[0] > 1 for shape in shapes)
+
+    batched = predict(model, np.stack([series, series]), 64, 2)
+    assert batched.shape == (2, 3, 64, 9)

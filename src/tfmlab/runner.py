@@ -16,7 +16,7 @@ from mlx.utils import tree_flatten
 
 from . import metrics
 from .attention import install_kv
-from .data import SeriesSet, build_windows, load_ett, synthetic_set
+from .data import SeriesSet, build_multi_windows, build_windows, load_ett, synthetic_set
 from .kv import KV_NAMES, make_kv_plan
 from .runtime import (
     env_info,
@@ -81,6 +81,9 @@ class RunConfig:
     data_dir: str = "data/raw"
     datasets: tuple[str, ...] = ("ETTh1", "ETTh2", "ETTm1", "ETTm2")
     synthetic: bool = True
+    # Group each time window's channels into one decode call, so variate
+    # attention runs. Deltas stay relative to fp32 either way.
+    multi: bool = False
     contexts: tuple[int, ...] = (512, 2048, 8192, 15360)
     horizon: int = 64
     windows: int = 6
@@ -98,6 +101,9 @@ class RunConfig:
     # Weight specs to combine with the KV grid. Each pair gets its own row, so
     # weight-only and KV-only errors can be separated from the combined error.
     kv_weights: tuple[str, ...] = ("fp32",)
+    # Which attention blocks to compress. Multivariate runs need seq/var split
+    # to attribute the error between the two.
+    kv_scopes: tuple[str, ...] = ("both",)
     kv_contexts: tuple[int, ...] = (2048, 8192, 15360)
     throughput_contexts: tuple[int, ...] = (512, 2048, 15360)
     throughput_batches: tuple[int, ...] = (1, 8, 32)
@@ -168,14 +174,26 @@ def _load_data(cfg: RunConfig, contexts: tuple[int, ...]) -> tuple[dict[str, Ser
     if cfg.synthetic:
         sets["synthetic"] = synthetic_set()
     eval_data: dict[tuple[str, int], EvalData] = {}
+    builder = build_multi_windows if cfg.multi else build_windows
     for name, series_set in sets.items():
         for context in contexts:
-            windows = build_windows(series_set, context, cfg.horizon, cfg.windows)
+            windows = builder(series_set, context, cfg.horizon, cfg.windows)
             if windows is None:
                 continue
             x, y, s, _ = windows
             eval_data[(name, context)] = EvalData(x, y, s)
     return sets, eval_data
+
+
+def _flatten(pred: np.ndarray, targets: np.ndarray, scales: np.ndarray):
+    """Collapse a (windows, variates, ...) prediction to per-series rows."""
+    if pred.ndim == 4:
+        return (
+            pred.reshape(-1, pred.shape[-2], pred.shape[-1]),
+            targets.reshape(-1, targets.shape[-1]),
+            scales.reshape(-1),
+        )
+    return pred, targets, scales
 
 
 def _accuracy(
@@ -193,10 +211,12 @@ def _accuracy(
             continue
         pred = predict(model, data.contexts, cfg.horizon, batch_size or cfg.eval_batch)
         predictions[(name, context)] = pred
+        flat_pred, flat_targets, flat_scales = _flatten(pred, data.targets, data.scales)
         if ref is None:
-            m = metrics.evaluate(pred, data.targets, data.scales).to_dict()
+            m = metrics.evaluate(flat_pred, flat_targets, flat_scales).to_dict()
         else:
-            m = metrics.compare(pred, ref[(name, context)], data.targets, data.scales)
+            flat_ref, _, _ = _flatten(ref[(name, context)], data.targets, data.scales)
+            m = metrics.compare(flat_pred, flat_ref, flat_targets, flat_scales)
         per_dataset.setdefault(name, {})[str(context)] = m
     macro: dict[str, dict] = {}
     for context in contexts:
@@ -210,7 +230,9 @@ def _accuracy(
     return per_dataset, macro, predictions
 
 
-def _throughput(model, cfg: RunConfig, contexts: tuple[int, ...], cap_batch: int | None = None) -> dict:
+def _throughput(
+    model, cfg: RunConfig, contexts: tuple[int, ...], cap_batch: int | None = None, variates: int = 1
+) -> dict:
     out: dict[str, dict] = {}
     for context in contexts:
         out[str(context)] = {}
@@ -218,14 +240,16 @@ def _throughput(model, cfg: RunConfig, contexts: tuple[int, ...], cap_batch: int
             if cap_batch is not None and batch > cap_batch:
                 continue
             out[str(context)][str(batch)] = measure_latency(
-                model, batch, context, cfg.horizon, cfg.repeats
+                model, batch, context, cfg.horizon, cfg.repeats, variates=variates
             )
     return out
 
 
-def _memory(model, cfg: RunConfig, contexts: tuple[int, ...]) -> dict:
+def _memory(model, cfg: RunConfig, contexts: tuple[int, ...], variates: int = 1) -> dict:
     return {
-        str(context): measure_peak_memory(model, cfg.mem_batch, context, cfg.horizon)
+        str(context): measure_peak_memory(
+            model, cfg.mem_batch, context, cfg.horizon, variates=variates
+        )
         for context in contexts
     }
 
@@ -237,6 +261,7 @@ def _weight_run(
     contexts: tuple[int, ...],
     ref: dict[tuple[str, int], np.ndarray] | None,
     ref_bytes: int | None,
+    variates: int = 1,
 ) -> dict:
     model = load_model(cfg.checkpoint)
     apply_weight_spec(model, spec)
@@ -252,8 +277,8 @@ def _weight_run(
         "weight_ratio": (ref_bytes / nbytes) if ref_bytes else None,
         "accuracy": acc,
         "macro": macro,
-        "throughput": _throughput(model, cfg, cfg.throughput_contexts),
-        "memory": _memory(model, cfg, cfg.throughput_contexts),
+        "throughput": _throughput(model, cfg, cfg.throughput_contexts, variates=variates),
+        "memory": _memory(model, cfg, cfg.throughput_contexts, variates=variates),
     }
     unload_model(model)
     return result
@@ -267,12 +292,14 @@ def _kv_run(
     eval_data: dict[tuple[str, int], EvalData],
     ref: dict[tuple[str, int], np.ndarray],
     contexts: tuple[int, ...],
+    variates: int = 1,
+    scope: str = "both",
 ) -> dict:
     model = load_model(cfg.checkpoint)
     apply_weight_spec(model, weight_spec)
     plan = make_kv_plan(name, len(model.transformer_stack.layers))
     for index, compressor in enumerate(plan):
-        install_kv(model, compressor, scope="both", layers=[index])
+        install_kv(model, compressor, scope=scope, layers=[index])
 
     # The first forward at the probe shape traces the compiled graph and records
     # every K/V tensor shape. Later calls at the same shape reuse the graph.
@@ -280,8 +307,13 @@ def _kv_run(
     for compressor in plan:
         compressor.stats.reset()
     probe = np.sin(np.linspace(0.0, 40.0, probe_context, dtype=np.float32))
-    probe_batch = np.stack([probe] * cfg.mem_batch)
-    mx.eval(model.decode(mx.array(probe_batch)[:, None, :], cfg.horizon))
+    if variates > 1:
+        probe_batch = np.stack([probe + 0.05 * j for j in range(variates)])
+        probe_input = mx.array(np.stack([probe_batch] * cfg.mem_batch))
+    else:
+        probe_batch = np.stack([probe] * cfg.mem_batch)
+        probe_input = mx.array(probe_batch)[:, None, :]
+    mx.eval(model.decode(probe_input, cfg.horizon))
     logical = sum(compressor.logical_bytes() for compressor in plan)
     fp16 = sum(compressor.fp16_bytes() for compressor in plan)
     probe_calls = sum(len(compressor.stats.calls) for compressor in plan)
@@ -299,18 +331,21 @@ def _kv_run(
         model, cfg, eval_data, contexts, ref, batch_size=16 if "turbo" in name else None
     )
     display = name if weight == "fp32" else f"{weight}+{name}"
+    if scope != "both":
+        display += f"@{scope}"
     result = {
         "name": display,
         "weight": weight,
+        "kv_scope": scope,
         "bits_k": bits_k,
         "bits_v": bits_v,
         "bits_per_value": (bits_k + bits_v) / 2,
         "accuracy": acc,
         "macro": macro,
         "throughput": _throughput(
-            model, cfg, contexts, cap_batch=8 if "turbo" in name else None
+            model, cfg, contexts, cap_batch=8 if "turbo" in name else None, variates=variates
         ),
-        "memory": _memory(model, cfg, contexts),
+        "memory": _memory(model, cfg, contexts, variates=variates),
         "kv_logical_bytes": logical,
         "kv_fp16_bytes": fp16,
         "kv_reduction": (fp16 / logical) if logical else None,
@@ -330,6 +365,9 @@ def run(cfg: RunConfig) -> dict:
     started = time.time()
     needed = tuple(sorted(set(cfg.contexts) | set(cfg.kv_contexts) | set(cfg.throughput_contexts)))
     sets, eval_data = _load_data(cfg, needed)
+    variates = 1
+    if cfg.multi and eval_data:
+        variates = int(next(iter(eval_data.values())).contexts.shape[1])
     unavailable = sorted({c for c in needed if not any(k[1] == c for k in eval_data)})
     if unavailable:
         print(f"[data] contexts without data: {unavailable}", flush=True)
@@ -354,10 +392,12 @@ def run(cfg: RunConfig) -> dict:
                 "freq": series_set.freq,
                 "windows": {
                     str(c): (
-                        len(eval_data[(name, c)].contexts) // max(1, len(series_set))
-                        if (name, c) in eval_data
-                        else 0
+                        len(eval_data[(name, c)].contexts)
+                        if cfg.multi
+                        else len(eval_data[(name, c)].contexts) // max(1, len(series_set))
                     )
+                    if (name, c) in eval_data
+                    else 0
                     for c in needed
                 },
             }
@@ -395,14 +435,18 @@ def run(cfg: RunConfig) -> dict:
                 "weight_ratio": 1.0,
                 "accuracy": acc,
                 "macro": macro,
-                "throughput": _throughput(model, cfg, cfg.throughput_contexts),
-                "memory": _memory(model, cfg, cfg.throughput_contexts),
+                "throughput": _throughput(
+                    model, cfg, cfg.throughput_contexts, variates=variates
+                ),
+                "memory": _memory(model, cfg, cfg.throughput_contexts, variates=variates),
             }
             unload_model(model)
             del model
         else:
             try:
-                result = _weight_run(cfg, spec, eval_data, cfg.contexts, ref_preds, ref_bytes)
+                result = _weight_run(
+                    cfg, spec, eval_data, cfg.contexts, ref_preds, ref_bytes, variates
+                )
             except Exception as error:  # keep the grid running; record the failure
                 gc.collect()
                 mx.clear_cache()
@@ -420,29 +464,36 @@ def run(cfg: RunConfig) -> dict:
 
     kv_specs = weight_specs(list(dict.fromkeys(["fp32", *cfg.kv_weights])))
 
-    for weight_name, weight_spec in kv_specs.items():
-        for name in cfg.kv:
-            if name == "none":
-                continue
-            if name not in KV_NAMES:
-                raise ValueError(f"unknown KV mode: {name}")
-            display = name if weight_name == "fp32" else f"{weight_name}+{name}"
-            try:
-                result = _kv_run(
-                    cfg,
-                    name,
-                    weight_name,
-                    weight_spec,
-                    eval_data,
-                    ref_preds,
-                    cfg.kv_contexts,
-                )
-            except Exception as error:
-                gc.collect()
-                mx.clear_cache()
-                result = {"name": display, "error": f"{type(error).__name__}: {error}"}
-            results["kv_runs"].append(result)
-            _save(results, cfg.out)
+    for scope in cfg.kv_scopes:
+        if scope not in ("both", "seq", "var"):
+            raise ValueError(f"unknown KV scope: {scope}")
+        for weight_name, weight_spec in kv_specs.items():
+            for name in cfg.kv:
+                if name == "none":
+                    continue
+                if name not in KV_NAMES:
+                    raise ValueError(f"unknown KV mode: {name}")
+                display = name if weight_name == "fp32" else f"{weight_name}+{name}"
+                if scope != "both":
+                    display += f"@{scope}"
+                try:
+                    result = _kv_run(
+                        cfg,
+                        name,
+                        weight_name,
+                        weight_spec,
+                        eval_data,
+                        ref_preds,
+                        cfg.kv_contexts,
+                        variates,
+                        scope,
+                    )
+                except Exception as error:
+                    gc.collect()
+                    mx.clear_cache()
+                    result = {"name": display, "error": f"{type(error).__name__}: {error}"}
+                results["kv_runs"].append(result)
+                _save(results, cfg.out)
 
     results["meta"]["elapsed_s"] = round(time.time() - started, 1)
     _save(results, cfg.out)
