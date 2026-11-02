@@ -17,10 +17,25 @@
 - 组合：`mix_l18_19_8 + affine4_l19fp16` 的 pinball +0.82%，权重 227 MB、KV 137 MB、峰值 1755 MB（fp32 2774 MB）。
 - 多变量（ETT 7 通道同批）：fp32 pinball 0.1152，优于单变量 0.1168；KV 压缩损失放大约 6 倍，主要来自 variate attention；seq 用 `affine4`、var 用 `affine8` 后为 +1.15%（2418 MB，2.29×）。
 - 量化不提速：模型层 GEMM 只有 482 token，int4 反而慢 9%；端到端差异 ≤9%。4-bit 的收益在显存（2774 → 1717 MB），不在吞吐。
+- 基准对齐：MLX fp32 与 PyTorch 后端在 4 个 ETT 的 56 条序列上平均归一化偏差 0.0013、最大 0.0166，pinball 差 −0.001%（ctx 15,360）。
 
 选择：权重用 `int8_g64` 或 `mix_l18_19_8`；单变量 KV 用 19 层 `affine4` + 末层 fp16；多变量 KV 用 seq `affine4` + var `affine8`。
 
 ## 结果
+
+### 基准对齐：MLX vs PyTorch（上下文 15,360）
+
+56 条序列（4 个 ETT，每条 2 个窗口），torch 2.15.0 在 CPU 上推理，与 MLX fp32 逐分位比较。
+
+| 指标 | 值 |
+|---|---|
+| 最大归一化偏差 | 0.0166 |
+| 平均归一化偏差 | 0.0013 |
+| 95 分位归一化偏差 | 0.0034 |
+| pinball 差（MLX − torch） | −0.001% |
+| 相关系数 | 0.9999998 |
+
+MLX fp32 基线与原实现一致，其余表格的 `Δ` 有可信参照。完整结果见 [`results/parity.json`](results/parity.json)。
 
 ### 权重与混合精度（上下文 15,360）
 
@@ -214,6 +229,7 @@ done
 .venv/bin/tfmq kv-sensitivity --kv turbo3_mse \
   --out results/kv_sensitivity_turbo3.json --md results/kv_sensitivity_turbo3.md
 .venv/bin/tfmq profile
+.venv/bin/tfmq parity  # 需要 torch：uv pip install -e ".[parity]"
 ```
 
 完整网格在 M5 / 32 GB 上约 20–25 分钟。
@@ -264,6 +280,7 @@ src/tfmlab/
   kv.py              affine、PolarQuant、QJL KV 压缩
   kv_sensitivity.py  KV 逐层/逐头敏感度
   profile.py         GEMM 与端到端性能剖析
+  parity.py          与 PyTorch 后端的数值对齐
   attention.py       注意力补丁
   runtime.py         加载、推理、计时、显存
   metrics.py         点预测与分位数指标
@@ -282,6 +299,7 @@ tests/
 - KV 压缩没有融合 kernel，解码开销计入吞吐；峰值显存下降需要自定义 Metal kernel。
 - KV 敏感度只覆盖 ETTh1 + synthetic 的 60 个窗口。第 19 层的结论在两种压缩模式下一致；混合 KV 的 −0.36% 幅度小于 1%，不应外推。
 - 多变量只测 ETT 的 7 通道同批；未覆盖变量数变化、变量子集和协变量输入。
+- PyTorch 对照只在 CPU 上跑，未验证 MPS 路径。
 - TimesFM 3.0 权重使用 non-commercial 许可证，本仓库不重新分发权重。
 
 ## 许可证

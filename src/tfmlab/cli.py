@@ -117,6 +117,23 @@ def _cmd_profile(args) -> int:
     return 0
 
 
+def _cmd_parity(args) -> int:
+    from .parity import ParityConfig, run as run_parity
+
+    run_parity(
+        ParityConfig(
+            checkpoint=args.checkpoint,
+            datasets=tuple(args.datasets.split(",")),
+            context=args.context,
+            windows=args.windows,
+            batch=args.batch,
+            device=args.device,
+            out=args.out,
+        )
+    )
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="tfmq")
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -163,6 +180,16 @@ def main(argv: list[str] | None = None) -> int:
     prof_p.add_argument("--repeats", type=int, default=3)
     prof_p.add_argument("--out", default="results/profile.json")
     prof_p.set_defaults(func=_cmd_profile)
+
+    par_p = sub.add_parser("parity", help="compare PyTorch and MLX fp32 outputs")
+    par_p.add_argument("--checkpoint", default="models/timesfm-3.0")
+    par_p.add_argument("--datasets", default="ETTh1", help="comma separated")
+    par_p.add_argument("--context", type=int, default=15360)
+    par_p.add_argument("--windows", type=int, default=2)
+    par_p.add_argument("--batch", type=int, default=8)
+    par_p.add_argument("--device", default="cpu")
+    par_p.add_argument("--out", default="results/parity.json")
+    par_p.set_defaults(func=_cmd_parity)
 
     args = parser.parse_args(argv)
     return args.func(args)

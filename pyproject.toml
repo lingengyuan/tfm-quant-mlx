@@ -19,6 +19,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8"]
+parity = ["torch>=2.0"]
 
 [project.scripts]
 tfmq = "tfmlab.cli:main"
