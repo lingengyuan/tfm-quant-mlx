@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.5 — 2026-11-03
+
+- `tfmq profile` 的 GEMM 行按配置生成实际 shape：batch 8 × 482 token = 3,856 行，同时保留 482 与 15,424 行对照。
+- GEMM 三档交错计时（每档 15 次），减小热漂移对比较的影响；保留每次采样。
+- `profile.json` 保存每档原始计时、git 提交与脏状态、checkpoint 文件哈希、合成输入哈希与环境信息。
+
 ## 0.1.4 — 2026-11-03
 
 - 新增 `attention-compare` 命令与 `configs/attention_manual.yaml`、`configs/attention_sdpa.yaml`。

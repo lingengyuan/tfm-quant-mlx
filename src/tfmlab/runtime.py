@@ -96,6 +96,7 @@ def measure_latency(
     repeats: int = 3,
     warmup: int = 2,
     variates: int = 1,
+    samples: bool = False,
 ) -> dict:
     x = _input(batch, context, variates)
     for _ in range(warmup):
@@ -106,7 +107,7 @@ def measure_latency(
         mx.eval(model.decode(x, horizon))
         times.append(time.perf_counter() - start)
     times = np.asarray(times)
-    return {
+    out = {
         "batch": batch,
         "context": context,
         "variates": variates,
@@ -114,6 +115,14 @@ def measure_latency(
         "latency_ms_p95": float(np.percentile(times, 95) * 1000.0),
         "series_per_s": float(batch * variates / np.median(times)),
     }
+    if samples:
+        out["latency_ms_samples"] = [float(t * 1000.0) for t in times]
+    return out
+
+
+def synthetic_input(batch: int, context: int, variates: int = 1) -> mx.array:
+    """Deterministic input used by latency and memory probes."""
+    return _input(batch, context, variates)
 
 
 def measure_peak_memory(
