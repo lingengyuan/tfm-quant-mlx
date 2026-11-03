@@ -64,16 +64,15 @@ def gemm_rows(tokens: tuple[int, ...] = (482, 15424), dim: int = 1280) -> list[d
     return rows
 
 
-def _e2e_runs() -> list[tuple[str, str | None, str | None, object | None]]:
+def _e2e_runs() -> list[tuple[str, str | None, str | None]]:
     return [
-        ("fp32", None, None, None),
-        ("int8_g64", "int8_g64", None, None),
-        ("int4_g64", "int4_g64", None, None),
-        ("fp16", "fp16", None, None),
-        ("fp16_compute", "fp16", None, mx.float16),
-        ("sdpa", None, "sdpa", None),
-        ("affine4", None, "affine4", None),
-        ("affine4_sdpa", None, "affine4_sdpa", None),
+        ("fp32", None, None),
+        ("int8_g64", "int8_g64", None),
+        ("int4_g64", "int4_g64", None),
+        ("fp16", "fp16", None),
+        ("sdpa", None, "sdpa"),
+        ("affine4", None, "affine4"),
+        ("affine4_sdpa", None, "affine4_sdpa"),
     ]
 
 
@@ -99,12 +98,10 @@ def run(cfg: ProfileConfig) -> dict:
         "e2e": [],
     }
     print(f"[profile] context {cfg.context}, batch {cfg.batch}", flush=True)
-    for label, weight_name, kv_name, compute_dtype in _e2e_runs():
+    for label, weight_name, kv_name in _e2e_runs():
         model = load_model(cfg.checkpoint)
         if weight_name is not None:
             apply_weight_spec(model, weight_specs([weight_name])[weight_name])
-        if compute_dtype is not None:
-            model._compute_dtype = compute_dtype
         kv = _kv_for(kv_name)
         if kv is not None:
             install_kv(model, kv)

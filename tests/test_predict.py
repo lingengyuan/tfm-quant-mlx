@@ -1,5 +1,8 @@
+import warnings
+
 import numpy as np
 import pandas as pd
+import pytest
 
 from tfmlab.predict import format_forecast, series_from_frame, stacked_series
 
@@ -29,6 +32,29 @@ def test_stacked_series_drops_rows_across_all_columns():
     # Rows 0, 2, 3, 4 survive; no column-local shifting.
     assert contexts[0].tolist() == [1.0, 3.0, 4.0, 5.0]
     assert contexts[1].tolist() == [0.0, 3.0, 4.0, 5.0]
+
+
+def test_stacked_series_drops_non_finite_and_overflowed_rows():
+    frame = pd.DataFrame(
+        {
+            "a": [1.0, np.inf, 3.0, 1e40, 5.0],
+            "b": [0.0, 2.0, 3.0, 4.0, 5.0],
+        }
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)
+        names, contexts, length = stacked_series(frame, context=8)
+    assert names == ["a", "b"]
+    # inf and 1e40 (finite in float64, inf in float32) are dropped.
+    assert length == 3
+    assert contexts[0].tolist() == [1.0, 3.0, 5.0]
+
+
+def test_format_forecast_rejects_non_finite_predictions():
+    pred = np.zeros((2, 9), dtype=np.float32)
+    pred[0, 0] = np.nan
+    with pytest.raises(ValueError):
+        format_forecast("s", pred)
 
 
 def test_format_forecast_sorts_quantiles():

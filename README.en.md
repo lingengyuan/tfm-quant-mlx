@@ -18,7 +18,7 @@ The Chinese README ([README.md](README.md)) carries the full tables and per-sect
 - KV error also concentrates in the last block: keeping layer 19 at fp16 moves `affine4` from +0.52% to **−0.36%** (137 MB, 2.88×) and `turbo3_mse` from +2.71% to +0.69% (141 MB, 2.80×).
 - Multivariate: fp32 pinball 0.1152 vs 0.1168 univariate; KV loss grows ~6× because variate attention is sensitive. Sequence `affine4` + variate `affine8` gives +1.15% at 2.29×.
 - Covariates: dropping them costs +4.98% pinball; int4 rises to +17.2%, while the seq/var KV mix stays at −0.91%.
-- Throughput does not improve: at 482 tokens int4 GEMM is 9% slower; end-to-end differences stay ≤9%. The gain from 4-bit is memory (2774 → 1717 MB).
+- Throughput does not improve: at 482 tokens the three precisions differ by ≤3%; end-to-end differences stay ≤7%. The gain from 4-bit is memory (2774 → 1717 MB).
 - Cross-backend baseline: MLX fp32 vs PyTorch on 56 series, mean normalized deviation 0.0013 (max 0.0081), pinball difference −0.001%.
 
 ## Results

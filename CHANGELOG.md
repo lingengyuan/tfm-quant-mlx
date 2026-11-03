@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.2 — 2026-11-03
+
+- 预测输入与输出增加有限值检查：`--multi` / `--covariates` 按共同有限行取窗口；非有限预测直接报错，不再写出无效 CSV。
+- 删除性能探针中重复的 `fp16_compute` 档（与 `fp16` 配置相同），并重跑 `results/profile.json`。
+- 修正 README 逐层 KV 表的旧体积（127 / 141 MB）。
+
 ## 0.1.1 — 2026-11-03
 
 - 修正 KV 压缩器的位宽与重构：PolarQuant 按补零后的编码计位并折算到原始 `head_dim`；QJL 与 prod 残差使用 `sqrt(pi/2/d)` 缩放，零输入重构为零。

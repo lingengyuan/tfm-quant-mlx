@@ -58,23 +58,28 @@ def series_from_frame(frame: pd.DataFrame, context: int) -> dict[str, np.ndarray
 def stacked_series(
     frame: pd.DataFrame, context: int
 ) -> tuple[list[str], np.ndarray, int]:
-    """Rows with any missing value dropped, then stacked as variates.
+    """Rows with any missing or non-finite value dropped, then stacked.
 
     Dropping per column would shift different timestamps together, so the row
-    mask is shared across all numeric columns.
+    mask is shared across all numeric columns. The mask is applied after the
+    float32 cast, because large float64 values can overflow to ``inf``.
     """
     numeric = frame.select_dtypes(include=[np.number])
     if numeric.shape[1] == 0:
         raise ValueError("input has no numeric columns")
-    numeric = numeric.dropna(axis=0, how="any")
-    if len(numeric) < 2:
-        raise ValueError("fewer than two complete rows across numeric columns")
-    values = numeric.to_numpy(dtype=np.float32)[-context:]
-    return [str(column) for column in numeric.columns], values.T, len(values)
+    names = [str(column) for column in numeric.columns]
+    values = numeric.to_numpy(dtype=np.float32)
+    values = values[np.isfinite(values).all(axis=1)]
+    if len(values) < 2:
+        raise ValueError("fewer than two complete finite rows across numeric columns")
+    values = values[-context:]
+    return names, values.T, len(values)
 
 
 def format_forecast(name: str, pred: np.ndarray) -> pd.DataFrame:
     """Long-form rows: series, step, point, q0.1 .. q0.9 (sorted per step)."""
+    if not np.isfinite(pred).all():
+        raise ValueError(f"non-finite forecast for {name}")
     pred = np.sort(pred, axis=-1)
     frame = pd.DataFrame(
         {
