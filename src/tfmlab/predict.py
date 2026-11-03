@@ -116,6 +116,9 @@ def covariate_arrays(
     numeric = frame.select_dtypes(include=[np.number])
     if numeric.shape[1] == 0:
         raise ValueError("input has no numeric columns")
+    # An integer timestamp column is numeric but never a series.
+    if time_name is not None and time_name in numeric.columns:
+        numeric = numeric.drop(columns=[time_name])
     times = None
     if time_name is not None:
         if time_name not in frame.columns:
@@ -174,10 +177,21 @@ def covariate_arrays(
 
     index = np.arange(length, dtype=np.float64)
     if times is not None:
-        stamps = times.iloc[hist_start:hist_end]
+        # With explicit future rows their timestamps cover the whole span.
+        span_end = rows if future_names else hist_end
+        stamps = times.iloc[hist_start:span_end]
         hours = (stamps - stamps.iloc[0]).dt.total_seconds().to_numpy() / 3600.0
-        step = float(np.median(np.diff(np.sort(np.unique(hours))))) if len(hours) > 1 else 1.0
-        index = np.concatenate([hours, hours[-1] + step * np.arange(1, horizon + 1)])
+        if future_names:
+            index = hours
+        else:
+            step = (
+                float(np.median(np.diff(np.sort(np.unique(hours)))))
+                if len(hours) > 1
+                else 1.0
+            )
+            index = np.concatenate(
+                [hours, hours[-1] + step * np.arange(1, horizon + 1)]
+            )
     calendar = np.stack(
         [
             np.sin(2.0 * np.pi * index / period),

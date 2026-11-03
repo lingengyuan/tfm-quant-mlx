@@ -88,3 +88,19 @@ def test_window_offset_moves_origins_earlier():
     end = len(source) - 64 - 2 * 64
     np.testing.assert_allclose(shifted[0][-1], source[end - 256 : end])
     np.testing.assert_allclose(shifted[1][-1], source[end : end + 64])
+
+
+def test_tail_windows_leave_a_reserved_block_untouched():
+    series_set = synthetic_set(length=1000)
+    probe = build_windows(series_set, 256, 64, 2, offset=2, mode="tail")
+    evaluation = build_windows(series_set, 256, 64, 2, mode="tail")
+    source = series_set.series[probe[3][-1]]
+    # Probe covers ends 744 and 808; evaluation covers 872 and 936.
+    np.testing.assert_allclose(probe[1][-1], source[808:872])
+    first_channel = evaluation[3][0]
+    np.testing.assert_allclose(
+        evaluation[1][0], series_set.series[first_channel][872:936]
+    )
+    probe_ends = {808, 744}
+    evaluation_ends = {936, 872}
+    assert probe_ends.isdisjoint(evaluation_ends)

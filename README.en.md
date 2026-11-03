@@ -15,7 +15,7 @@ The Chinese README ([README.md](README.md)) carries the full tables and per-sect
 - Plain `int4`: 191–251 MB, pinball +10–12%, quantile crossing 9–19%. Loss concentrates in the last layer (+7.9%) and the output head (+67.8% at 4-bit). A held-out ETTh2 run keeps the same order: layer 19 +2.33%, residual block +2.60%, 4-bit head +31.75%.
 - 4-bit that works: `mix_l18_19_8` 227 MB (5.82×), +0.80%; clipping 0.95 (`mix_l18_19_8c95`) reaches −0.22% on ETT and +0.61% on Jena, but is worse on traffic (+2.00%).
 - KV: `affine8` 1.78× (−0.01%), `affine4` 3.20× (+0.52%), `turbo3_mse` 3.10× (+2.71%). `qjl1` also reaches 1.78× but compresses only K, so it stays the worst at that ratio (+4.73%).
-- KV error also concentrates in the last block: keeping layer 19 at fp16 moves `affine4` from +0.52% to **−0.36%** (137 MB, 2.88×) and `turbo3_mse` from +2.71% to +0.69% (141 MB, 2.80×). A held-out ETTh2 run recovers only 0.45 pp instead of 0.95 pp, and the paired bootstrap intervals at 15,360 include zero (`affine4` [−0.96%, +1.26%], last-block fp16 [−1.70%, +0.39%]).
+- KV error also concentrates in the last block: keeping layer 19 at fp16 moves `affine4` from +0.52% to **−0.36%** (137 MB, 2.88×) and `turbo3_mse` from +2.71% to +0.69% (141 MB, 2.80×). A held-out ETTh2 run recovers only 0.45 pp instead of 0.95 pp, and the paired bootstrap intervals at 15,360 include zero (`affine4` [−0.60%, +1.46%], last-block fp16 [−1.40%, +0.54%]).
 - Multivariate: fp32 pinball 0.1152 vs 0.1168 univariate; KV loss grows ~6× because variate attention is sensitive. Sequence `affine4` + variate `affine8` gives +1.15% at 2.29×.
 - Covariates: dropping them costs +4.98% pinball; int4 rises to +17.2%, while the seq/var KV mix stays at −0.91%.
 - Throughput does not improve: at 482 tokens the three precisions differ by ≤8%; end-to-end quantized runs are 0.4–5.6% faster, within the ~10% run-to-run spread. The gain from 4-bit is memory (2774 → 1717 MB).
@@ -106,7 +106,7 @@ Convert a quantized model once and load the packed weights:
 .venv/bin/tfmq predict data.csv --checkpoint models/timesfm-int8 --weights int8_g64
 ```
 
-Configuration is YAML under `configs/`. Key fields: `datasets`, `max_channels`, `contexts`, `windows`, `weights`, `kv`, `kv_contexts`, `kv_weights`, `kv_scopes`, `attention`, `multi`, `out`.
+Configuration is YAML under `configs/`. Key fields: `datasets`, `max_channels`, `contexts`, `windows`, `window_mode`, `weights`, `kv`, `kv_contexts`, `kv_weights`, `kv_scopes`, `attention`, `multi`, `out`.
 
 ## Method
 
@@ -116,7 +116,7 @@ Configuration is YAML under `configs/`. Key fields: `datasets`, `max_channels`, 
 - Naive baseline: repeat the last context value at every step, with all nine quantiles at that value. Reports give fp32 relative to it.
 - Paired differences: reports resample windows 2000 times for a 95% CI of each configuration's pinball difference from fp32.
 - Missing values are passed as masks instead of dropping rows, so gaps do not compress the time axis.
-- Holdout: `--offset N` on `sensitivity` / `kv-sensitivity` reserves the recent N windows for the evaluation grid, so probes use earlier, non-overlapping forecast origins.
+- Holdout: `--offset N` on `sensitivity` / `kv-sensitivity` moves the probe to an earlier contiguous block; with `window_mode: tail` on the evaluation config, the two blocks do not overlap.
 - KV is the per-forward K/V working set: TimesFM 3.0 MLX is a single full-sequence pass with no cross-call cache.
 - Weights use MLX affine quantization through `nn.QuantizedLinear`; clipping 0.95 trims each input group before quantization.
 

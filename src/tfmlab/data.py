@@ -200,13 +200,18 @@ def build_windows(
     horizon: int,
     num_windows: int,
     offset: int = 0,
+    mode: str = "spread",
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, list[int]] | None:
     """Return (contexts, targets, scales, channel_ids) for one dataset.
 
     ``scales`` is each window's context standard deviation, floored at 1e-6, and
     is used to express forecast deviations in native amplitude units.
     ``offset`` reserves that many recent windows for a separate evaluation set.
+    ``mode`` picks spread windows across the series or the ``num_windows`` most
+    recent ones; ``tail`` makes offset blocks disjoint.
     """
+    if mode not in ("spread", "tail"):
+        raise ValueError(f"unknown window mode: {mode}")
     min_len = context + horizon
     usable = [i for i, s in enumerate(series_set.series) if len(s) >= min_len]
     if not usable:
@@ -220,7 +225,10 @@ def build_windows(
     if last_end < first_end:
         return None
     count = max(1, min(num_windows, (last_end - first_end) // max(1, horizon) + 1))
-    ends = np.linspace(first_end, last_end, count).astype(int)
+    if mode == "spread":
+        ends = np.linspace(first_end, last_end, count).astype(int)
+    else:
+        ends = last_end - horizon * np.arange(count - 1, -1, -1)
 
     contexts, targets, scales, channels = [], [], [], []
     for end in ends:
@@ -394,18 +402,20 @@ def eval_windows(
     horizon: int,
     windows: int,
     offset: int = 0,
+    mode: str = "spread",
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Stack windows from the named ETT tables plus the synthetic suite.
 
-    ``offset`` shifts windows earlier so a probe can use forecast origins that
-    the evaluation grid does not cover.
+    ``offset`` shifts windows earlier and ``mode`` selects spread or tail
+    windows, so a probe can use forecast origins the evaluation grid does not
+    cover.
     """
     sets = [load_ett(name, data_dir) for name in datasets]
     if synthetic:
         sets.append(synthetic_set())
     frames = []
     for series_set in sets:
-        built = build_windows(series_set, context, horizon, windows, offset)
+        built = build_windows(series_set, context, horizon, windows, offset, mode)
         if built is not None:
             frames.append(built)
     if not frames:

@@ -67,7 +67,17 @@ def load_quantized(path: str):
     spec = WeightSpec(**meta["weight_spec"])
     model = TimesFM3Mlx(TimesFM3MlxConfig(**meta["model_config"]))
     apply_weight_spec(model, spec)
-    model.load_safetensors(os.path.join(path, meta["weights_file"]))
+    # mx.load keeps bf16 native; safetensors.numpy (used by the model's own
+    # loader) cannot read bfloat16.
+    state = dict(mx.load(os.path.join(path, meta["weights_file"])))
+    model_keys = {key for key, _ in tree_flatten(model.parameters())}
+    missing = model_keys - set(state)
+    extra = set(state) - model_keys
+    if missing or extra:
+        raise ValueError(
+            f"weight/name mismatch: {len(missing)} missing, {len(extra)} extra"
+        )
+    model.load_weights(list(state.items()))
     model._compiled_forward = None
     mx.eval(model.parameters())
     # Marks the model so a second quantization is rejected instead of silently

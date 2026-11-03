@@ -64,6 +64,7 @@ def _load_eval(cfg: SensitivityConfig) -> tuple[np.ndarray, np.ndarray, np.ndarr
         cfg.horizon,
         cfg.windows,
         cfg.offset,
+        "tail" if cfg.offset else "spread",
     )
 
 

@@ -148,6 +148,42 @@ def test_masked_covariate_decode_stays_finite():
     assert np.isfinite(pred).all()
 
 
+def test_masked_covariates_accept_a_batch_with_an_odd_context():
+    from tfmlab.runtime import predict_with_covariates
+
+    model = _model()
+    context = 65
+    series = np.sin(np.linspace(0.0, 40.0, context, dtype=np.float32))
+    targets = np.stack([series, series])
+    past_only = np.stack([np.stack([series, series])] * 2)
+    past_future = np.zeros((2, 2, context + 8), dtype=np.float32)
+    masks = np.zeros((2, context), dtype=bool)
+    pred = predict_with_covariates(
+        model,
+        targets,
+        past_only,
+        past_future,
+        8,
+        2,
+        target_mask=masks,
+        past_only_mask=np.zeros_like(past_only, dtype=bool),
+    )
+    assert pred.shape == (2, 8, 9)
+
+
+def test_bfloat16_export_roundtrip(tmp_path):
+    from tfmlab.convert import load_quantized, save_quantized
+    from tfmlab.weights import apply_weight_spec, weight_specs
+
+    model = _model()
+    spec = weight_specs(["bf16"])["bf16"]
+    apply_weight_spec(model, spec)
+    save_quantized(model, spec, str(tmp_path / "q"), "tiny")
+    loaded = load_quantized(str(tmp_path / "q"))
+    out = np.array(loaded.decode(mx.array(_series(1)[None]), 64))
+    assert np.isfinite(out).all()
+
+
 def test_quantized_export_roundtrip(tmp_path):
     from tfmlab.convert import load_quantized, save_quantized
     from tfmlab.weights import apply_weight_spec, weight_specs

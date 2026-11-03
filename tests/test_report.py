@@ -101,3 +101,85 @@ def test_report_computes_paired_bootstrap_interval(tmp_path):
     assert "配对差异" in text
     assert "int8_g64" in text
     assert "95% CI" in text
+
+
+def _paired_data() -> dict:
+    def entry(pinballs, groups):
+        metrics = {
+            "nmae": 0.4,
+            "nmae_delta_pct": 0.0,
+            "pinball": sum(pinballs) / len(pinballs),
+            "pinball_delta_pct": 0.0,
+            "coverage_error": 0.04,
+            "crossing_rate": 0.0,
+            "per_quantile_dev": [0.1] * 9,
+            "window_pinball": pinballs,
+            "window_group": groups,
+        }
+        return metrics
+
+    reference = {"ETTh1": {}, "ETTh2": {}}
+    quantized = {"ETTh1": {}, "ETTh2": {}}
+    for context in ("512",):
+        reference["ETTh1"][context] = entry([0.1] * 4, [0, 0, 1, 1])
+        reference["ETTh2"][context] = entry([0.1] * 4, [0, 0, 1, 1])
+        # ETTh1: +10%; ETTh2: -1%; the macro delta is +4.5%.
+        quantized["ETTh1"][context] = entry([0.11] * 4, [0, 0, 1, 1])
+        quantized["ETTh2"][context] = entry([0.099] * 4, [0, 0, 1, 1])
+
+    def run(name, accuracy):
+        return {
+            "name": name,
+            "kind": "quant",
+            "spec": {"dtype": "float32"},
+            "weight_bytes": 1.3e9,
+            "weight_ratio": 1.0,
+            "accuracy": accuracy,
+            "macro": {},
+            "throughput": {},
+            "memory": {},
+        }
+
+    return {
+        "meta": {"created": "x", "elapsed_s": 1, "config": {"horizon": 64}},
+        "env": {},
+        "datasets": {},
+        "weight_runs": [run("fp32", reference), run("int8_g64", quantized)],
+        "kv_runs": [],
+        "baselines": {},
+    }
+
+
+def test_paired_ci_matches_the_macro_delta(tmp_path):
+    path = tmp_path / "results.json"
+    path.write_text(json.dumps(_paired_data()))
+    text = report.generate(str(path))
+    row = next(line for line in text.splitlines() if "| int8_g64 | 512 |" in line)
+    assert "+4.50%" in row
+    assert "[+4.50%, +4.50%]" in row
+
+
+def test_paired_ci_resamples_origins_not_channels(tmp_path):
+    data = _paired_data()
+    quantized = data["weight_runs"][1]
+    # One origin is 10% worse, the other is unchanged; two channels per origin.
+    quantized["accuracy"] = {
+        "ETTh1": {
+            "512": {
+                **quantized["accuracy"]["ETTh1"]["512"],
+                "window_pinball": [0.11, 0.11, 0.10, 0.10],
+            }
+        },
+        "ETTh2": {
+            "512": {
+                **quantized["accuracy"]["ETTh2"]["512"],
+                "window_pinball": [0.11, 0.11, 0.10, 0.10],
+            }
+        },
+    }
+    path = tmp_path / "results.json"
+    path.write_text(json.dumps(data))
+    text = report.generate(str(path))
+    row = next(line for line in text.splitlines() if "| int8_g64 | 512 |" in line)
+    assert "+5.00%" in row
+    assert "[+0.00%, +10.00%]" in row

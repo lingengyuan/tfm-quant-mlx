@@ -108,6 +108,43 @@ def test_covariate_arrays_use_explicit_future_columns():
     assert masks["past_future"][0].tolist() == [False, False, False, False, True, False]
 
 
+def test_numeric_timestamp_column_is_not_a_series():
+    frame = pd.DataFrame(
+        {
+            "a": np.arange(10, dtype=np.float32),
+            "target": np.arange(10, dtype=np.float32),
+            "ts": 1_700_000_000 + np.arange(10),
+        }
+    )
+    name, _, past_only, past_future, _ = covariate_arrays(
+        frame, context=4, horizon=2, time_name="ts"
+    )
+    assert name == "target"
+    assert past_only.shape == (1, 4)
+    assert past_future.shape == (2, 6)
+
+
+def test_future_covariate_rows_supply_their_timestamps():
+    frame = pd.DataFrame(
+        {
+            "time": pd.date_range("2026-01-01", periods=4, freq="15min"),
+            "target": [1.0, 2.0, 3.0, 4.0],
+            "future": [10.0, 11.0, 12.0, 13.0],
+        }
+    )
+    _, _, _, past_future, _ = covariate_arrays(
+        frame,
+        context=1,
+        horizon=2,
+        target_name="target",
+        future_names=("future",),
+        time_name="time",
+    )
+    # Rows span 0, 0.25 and 0.5 hours; the last calendar row uses 0.5.
+    assert past_future[1, -1] == pytest.approx(np.sin(2 * np.pi * 0.5 / 24))
+    assert past_future[2, -1] == pytest.approx(np.cos(2 * np.pi * 0.5 / 24))
+
+
 def test_batched_forecasts_group_by_length(monkeypatch):
     import tfmlab.predict as predict_mod
 

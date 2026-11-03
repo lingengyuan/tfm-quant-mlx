@@ -89,6 +89,9 @@ class RunConfig:
     contexts: tuple[int, ...] = (512, 2048, 8192, 15360)
     horizon: int = 64
     windows: int = 6
+    # "spread" samples forecast origins across the series; "tail" keeps the
+    # most recent ones, which makes a probe offset a disjoint holdout block.
+    window_mode: str = "spread"
     weights: tuple[str, ...] = ("fp32", "fp16", "bf16", "int8_g64", "int4_g64", "int4_g32", "int4_g128")
     kv: tuple[str, ...] = (
         "affine8",
@@ -153,16 +156,23 @@ def _save(results: dict, path: str) -> None:
 
 
 def _aggregate(entries: list[dict]) -> dict:
-    """Element-wise mean of metric dictionaries."""
+    """Element-wise mean of metric dictionaries.
+
+    Per-window arrays stay out: datasets have different window counts, and the
+    paired report reads them per dataset instead.
+    """
     if not entries:
         return {}
-    keys = entries[0].keys()
+    skipped = {"window_pinball", "window_group"}
+    keys = [key for key in entries[0].keys() if key not in skipped]
     out = {}
     for key in keys:
         values = [e[key] for e in entries if key in e]
         if not values:
             continue
         if isinstance(values[0], list):
+            if any(len(value) != len(values[0]) for value in values):
+                continue
             out[key] = [float(np.mean([v[i] for v in values])) for i in range(len(values[0]))]
         elif isinstance(values[0], (int, float)):
             out[key] = float(np.mean(values))
@@ -174,6 +184,24 @@ class EvalData:
     contexts: np.ndarray
     targets: np.ndarray
     scales: np.ndarray
+    # Forecast-origin id per stacked window; channels of one origin share it.
+    groups: np.ndarray
+
+
+def _window_groups(channels: list[int]) -> np.ndarray:
+    """Split stacked windows into blocks that share one forecast origin.
+
+    ``build_windows`` loops origins first and channels second, so a block
+    starts whenever the first usable channel repeats.
+    """
+    groups = np.zeros(len(channels), dtype=np.int64)
+    first = channels[0]
+    group = 0
+    for index, channel in enumerate(channels):
+        if index and channel == first:
+            group += 1
+        groups[index] = group
+    return groups
 
 
 def _load_data(cfg: RunConfig, contexts: tuple[int, ...]) -> tuple[dict[str, SeriesSet], dict[tuple[str, int], EvalData]]:
@@ -183,14 +211,29 @@ def _load_data(cfg: RunConfig, contexts: tuple[int, ...]) -> tuple[dict[str, Ser
     if cfg.synthetic:
         sets["synthetic"] = synthetic_set()
     eval_data: dict[tuple[str, int], EvalData] = {}
-    builder = build_multi_windows if cfg.multi else build_windows
     for name, series_set in sets.items():
         for context in contexts:
-            windows = builder(series_set, context, cfg.horizon, cfg.windows)
+            if cfg.multi:
+                windows = build_multi_windows(
+                    series_set, context, cfg.horizon, cfg.windows
+                )
+            else:
+                windows = build_windows(
+                    series_set,
+                    context,
+                    cfg.horizon,
+                    cfg.windows,
+                    mode=cfg.window_mode,
+                )
             if windows is None:
                 continue
-            x, y, s, _ = windows
-            eval_data[(name, context)] = EvalData(x, y, s)
+            x, y, s, channels = windows
+            groups = (
+                np.arange(len(x), dtype=np.int64)
+                if cfg.multi
+                else _window_groups(channels)
+            )
+            eval_data[(name, context)] = EvalData(x, y, s, groups)
     return sets, eval_data
 
 
@@ -230,6 +273,13 @@ def _accuracy(
             float(value)
             for value in metrics.window_pinball(flat_pred, flat_targets, flat_scales)
         ]
+        if data.contexts.ndim == 3:
+            groups = np.repeat(
+                np.arange(len(data.contexts)), data.contexts.shape[1]
+            )
+        else:
+            groups = data.groups
+        m["window_group"] = groups.tolist()
         per_dataset.setdefault(name, {})[str(context)] = m
     macro: dict[str, dict] = {}
     for context in contexts:

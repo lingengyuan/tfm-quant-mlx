@@ -200,7 +200,12 @@ def _throughput_table(runs: list[dict], context: int) -> str:
 def _paired_table(
     runs: list[dict], ref: dict | None, contexts: list[int], draws: int = 2000
 ) -> str:
-    """Paired window bootstrap of pinball differences against fp32."""
+    """Paired window bootstrap of pinball differences against fp32.
+
+    Resampling happens per forecast origin, not per channel: channels at one
+    origin are correlated. The point estimate and every draw average datasets
+    with equal weight, matching the main tables' macro delta.
+    """
     if ref is None:
         return "_no data_"
     datasets = list(ref.get("accuracy", {}))
@@ -210,35 +215,46 @@ def _paired_table(
         for run in runs:
             if run.get("name") == ref.get("name"):
                 continue
-            diffs, base = [], []
+            draw_deltas = []
+            point_deltas = []
             for dataset in datasets:
                 current = _get(run, "accuracy", dataset, str(context), "window_pinball")
                 reference = _get(ref, "accuracy", dataset, str(context), "window_pinball")
                 if not current or not reference or len(current) != len(reference):
                     continue
-                diffs.extend(np.asarray(current) - np.asarray(reference))
-                base.extend(reference)
-            if not diffs:
+                diff = np.asarray(current) - np.asarray(reference)
+                groups = _get(run, "accuracy", dataset, str(context), "window_group")
+                if not groups or len(groups) != len(diff):
+                    groups = np.arange(len(diff))
+                groups = np.asarray(groups)
+                base = max(float(np.mean(reference)), 1e-12)
+                origins = np.unique(groups)
+                origin_diff = np.array(
+                    [diff[groups == origin].mean() for origin in origins]
+                )
+                # Equal-size groups make the origin mean equal the window mean.
+                picked = rng.integers(0, len(origins), (draws, len(origins)))
+                draw_deltas.append(
+                    100.0 * origin_diff[picked].mean(axis=1) / base
+                )
+                point_deltas.append(100.0 * float(origin_diff.mean()) / base)
+            if not point_deltas:
                 continue
-            relative = 100.0 * np.asarray(diffs) / max(float(np.mean(base)), 1e-12)
-            draws_mean = relative[
-                rng.integers(0, len(relative), (draws, len(relative)))
-            ].mean(axis=1)
+            point = float(np.mean(point_deltas))
+            draws_mean = np.mean(draw_deltas, axis=0)
             low, high = np.percentile(draws_mean, [2.5, 97.5])
             rows.append(
                 [
                     run["name"],
                     str(context),
-                    f"{relative.mean():+.2f}%",
+                    f"{point:+.2f}%",
                     f"[{low:+.2f}%, {high:+.2f}%]",
                     "是" if low > 0 or high < 0 else "否",
                 ]
             )
     if not rows:
         return "_no data_"
-    return _table(
-        ["配置", "上下文", "Δpinball", "95% CI", "CI 不含 0"], rows
-    )
+    return _table(["配置", "上下文", "Δpinball", "95% CI", "CI 不含 0"], rows)
 
 
 def _baseline_table(fp32: dict | None, baselines: dict, contexts: list[int]) -> str:
@@ -458,7 +474,7 @@ def generate(path: str) -> str:
         parts += [
             "## 配对差异（95% bootstrap CI）",
             "",
-            "按窗口重采样 2000 次，Δ 相对 fp32；CI 不含 0 表示差异稳定。",
+            "按预测时点重采样 2000 次，Δ 相对 fp32；CI 不含 0 表示差异稳定。",
             "",
             paired,
             "",

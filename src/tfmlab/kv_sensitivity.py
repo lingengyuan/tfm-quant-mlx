@@ -62,6 +62,7 @@ def run(cfg: KVSensitivityConfig) -> dict:
         cfg.horizon,
         cfg.windows,
         cfg.offset,
+        "tail" if cfg.offset else "spread",
     )
 
     model = load_model(cfg.checkpoint)

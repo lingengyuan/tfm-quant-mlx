@@ -90,7 +90,9 @@ def predict_with_covariates(
             past_only_covariates=past_only_chunk,
             past_future_covariates=past_future_chunk,
             target_mask=(
-                mx.array(target_mask[start:stop]) if target_mask is not None else None
+                mx.array(target_mask[start:stop])[:, None, :]
+                if target_mask is not None
+                else None
             ),
             past_only_mask=past_only_mask_chunk,
             past_future_mask=past_future_mask_chunk,
