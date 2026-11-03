@@ -14,10 +14,11 @@ def test_window_shapes_and_targets():
     ss = synthetic_set(length=4000)
     out = build_windows(ss, context=512, horizon=64, num_windows=3)
     assert out is not None
-    contexts, targets, scales, channels = out
+    contexts, targets, scales, channels, origins = out
     assert contexts.shape[1] == 512
     assert targets.shape[1] == 64
     assert contexts.shape[0] == targets.shape[0] == len(scales) == len(channels)
+    assert len(origins) == len(channels)
     assert np.isfinite(contexts).all() and np.isfinite(targets).all()
     assert (scales > 0).all()
 
@@ -29,7 +30,7 @@ def test_too_long_context_is_skipped():
 
 def test_windows_do_not_overrun_series():
     ss = synthetic_set(length=1000)
-    contexts, targets, _, _ = build_windows(ss, context=256, horizon=64, num_windows=4)
+    contexts, targets, _, _, _ = build_windows(ss, context=256, horizon=64, num_windows=4)
     for frame in list(contexts) + list(targets):
         assert np.isfinite(frame).all()
     # The last target must exist; build_windows slices s[end:end+horizon].
@@ -47,11 +48,23 @@ def test_multi_windows_keep_variates_together():
     series_set = synthetic_set(length=4000)
     out = build_multi_windows(series_set, 512, 64, 2)
     assert out is not None
-    contexts, targets, scales, channels = out
+    contexts, targets, scales, channels, origins = out
     assert contexts.shape == (2, len(channels), 512)
     assert targets.shape == (2, len(channels), 64)
     assert scales.shape == (2, len(channels))
+    assert origins.tolist() == [512, 3936]
     assert (scales > 0).all()
+
+
+def test_multi_windows_follow_tail_mode():
+    series_set = synthetic_set(length=4000)
+    tail = build_multi_windows(series_set, 512, 64, 2, mode="tail")
+    assert tail is not None
+    # Tail ends are length - horizon, then one horizon earlier.
+    assert tail[4].tolist() == [3872, 3936]
+    np.testing.assert_allclose(
+        tail[0][-1, 0], series_set.series[0][3936 - 512 : 3936]
+    )
 
 
 def test_covariate_windows_split_target_and_covariates():
@@ -74,6 +87,19 @@ def test_horizon_windows_share_contexts():
     assert targets[64].shape == (contexts.shape[0], 64)
     assert targets[256].shape == (contexts.shape[0], 256)
     assert len(scales) == contexts.shape[0]
+
+
+def test_origins_ignore_dropped_channels():
+    series_set = synthetic_set(length=4000)
+    # Context 512 gives ends 512, 2224, 3936. Poison one channel in each of the
+    # first two windows so those windows keep fewer channels than the third.
+    series_set.series[0][500:512] = np.nan
+    series_set.series[1][1712:1724] = np.nan
+    contexts, _, _, channels, origins = build_windows(series_set, 512, 64, 3)
+    assert contexts.shape[0] == 7 + 7 + len(series_set)
+    assert origins.tolist() == [512] * 7 + [2224] * 7 + [3936] * len(series_set)
+    # A positional split would start a new block wherever channel 1 reappears.
+    assert channels[7] != channels[0]
 
 
 def test_window_offset_moves_origins_earlier():

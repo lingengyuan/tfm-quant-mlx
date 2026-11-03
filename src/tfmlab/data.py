@@ -201,14 +201,16 @@ def build_windows(
     num_windows: int,
     offset: int = 0,
     mode: str = "spread",
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, list[int]] | None:
-    """Return (contexts, targets, scales, channel_ids) for one dataset.
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, list[int], np.ndarray] | None:
+    """Return (contexts, targets, scales, channel_ids, origins) for one dataset.
 
     ``scales`` is each window's context standard deviation, floored at 1e-6, and
     is used to express forecast deviations in native amplitude units.
     ``offset`` reserves that many recent windows for a separate evaluation set.
     ``mode`` picks spread windows across the series or the ``num_windows`` most
     recent ones; ``tail`` makes offset blocks disjoint.
+    ``origins`` is each window's end index. Windows dropped for missing values
+    would shift any positional grouping, so callers group by this id.
     """
     if mode not in ("spread", "tail"):
         raise ValueError(f"unknown window mode: {mode}")
@@ -230,7 +232,7 @@ def build_windows(
     else:
         ends = last_end - horizon * np.arange(count - 1, -1, -1)
 
-    contexts, targets, scales, channels = [], [], [], []
+    contexts, targets, scales, channels, origins = [], [], [], [], []
     for end in ends:
         for ch in usable:
             s = series_set.series[ch]
@@ -242,6 +244,7 @@ def build_windows(
             targets.append(tgt)
             scales.append(max(float(np.std(ctx)), 1e-6))
             channels.append(ch)
+            origins.append(end)
     if not contexts:
         return None
     return (
@@ -249,6 +252,7 @@ def build_windows(
         np.stack(targets).astype(np.float32),
         np.asarray(scales, dtype=np.float32),
         channels,
+        np.asarray(origins, dtype=np.int64),
     )
 
 
@@ -257,24 +261,34 @@ def build_multi_windows(
     context: int,
     horizon: int,
     num_windows: int,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, list[int]] | None:
+    offset: int = 0,
+    mode: str = "spread",
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, list[int], np.ndarray] | None:
     """Keep variates of the same time span in one window.
 
-    Returns ``(contexts, targets, scales, channels)`` with shapes
-    ``(W, V, context)``, ``(W, V, horizon)`` and ``(W, V)``. One decoder call
-    then mixes all variates through variate attention.
+    Returns ``(contexts, targets, scales, channels, origins)`` with shapes
+    ``(W, V, context)``, ``(W, V, horizon)``, ``(W, V)``, ``(V,)`` and ``(W,)``.
+    One decoder call then mixes all variates through variate attention.
+    ``offset`` and ``mode`` select windows like ``build_windows``.
     """
+    if mode not in ("spread", "tail"):
+        raise ValueError(f"unknown window mode: {mode}")
     min_len = context + horizon
     usable = [i for i, s in enumerate(series_set.series) if len(s) >= min_len]
     if len(usable) < 2:
         return None
     length = min(len(series_set.series[i]) for i in usable)
     first_end = context
-    last_end = length - horizon
+    last_end = length - horizon - offset * horizon
+    if last_end < first_end:
+        return None
     count = max(1, min(num_windows, (last_end - first_end) // max(1, horizon) + 1))
-    ends = np.linspace(first_end, last_end, count).astype(int)
+    if mode == "spread":
+        ends = np.linspace(first_end, last_end, count).astype(int)
+    else:
+        ends = last_end - horizon * np.arange(count - 1, -1, -1)
 
-    contexts, targets, scales = [], [], []
+    contexts, targets, scales, origins = [], [], [], []
     for end in ends:
         ctx = np.stack([series_set.series[ch][end - context : end] for ch in usable])
         tgt = np.stack([series_set.series[ch][end : end + horizon] for ch in usable])
@@ -283,6 +297,7 @@ def build_multi_windows(
         contexts.append(ctx)
         targets.append(tgt)
         scales.append(np.maximum(np.std(ctx, axis=1), 1e-6))
+        origins.append(end)
     if not contexts:
         return None
     return (
@@ -290,6 +305,7 @@ def build_multi_windows(
         np.stack(targets).astype(np.float32),
         np.stack(scales).astype(np.float32),
         usable,
+        np.asarray(origins, dtype=np.int64),
     )
 
 

@@ -29,6 +29,7 @@ def _delta(a: float, b: float) -> float:
 
 _CONFIG_KEYS = (
     "checkpoint",
+    "data_dir",
     "datasets",
     "synthetic",
     "max_channels",

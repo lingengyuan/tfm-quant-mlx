@@ -25,6 +25,7 @@ def _file(attention: str, windows: int = 4, pinball: float = 0.10) -> dict:
         "meta": {
             "config": {
                 "checkpoint": "models/x",
+                "data_dir": "data/raw",
                 "datasets": ["ETTh1"],
                 "synthetic": False,
                 "max_channels": 0,
@@ -70,3 +71,15 @@ def test_compare_rejects_two_manual_files(tmp_path):
     other.write_text(json.dumps(_file("manual", pinball=0.11)))
     with pytest.raises(ValueError):
         attention_compare.render(str(manual), str(other))
+
+
+def test_compare_rejects_a_different_data_dir(tmp_path):
+    manual = _file("manual")
+    sdpa = _file("sdpa")
+    sdpa["meta"]["config"]["data_dir"] = "data/other"
+    left = tmp_path / "manual.json"
+    right = tmp_path / "sdpa.json"
+    left.write_text(json.dumps(manual))
+    right.write_text(json.dumps(sdpa))
+    with pytest.raises(ValueError, match="data_dir"):
+        attention_compare.render(str(left), str(right))

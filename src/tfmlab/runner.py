@@ -184,24 +184,8 @@ class EvalData:
     contexts: np.ndarray
     targets: np.ndarray
     scales: np.ndarray
-    # Forecast-origin id per stacked window; channels of one origin share it.
+    # Forecast-origin id per window; channels of one origin share it.
     groups: np.ndarray
-
-
-def _window_groups(channels: list[int]) -> np.ndarray:
-    """Split stacked windows into blocks that share one forecast origin.
-
-    ``build_windows`` loops origins first and channels second, so a block
-    starts whenever the first usable channel repeats.
-    """
-    groups = np.zeros(len(channels), dtype=np.int64)
-    first = channels[0]
-    group = 0
-    for index, channel in enumerate(channels):
-        if index and channel == first:
-            group += 1
-        groups[index] = group
-    return groups
 
 
 def _load_data(cfg: RunConfig, contexts: tuple[int, ...]) -> tuple[dict[str, SeriesSet], dict[tuple[str, int], EvalData]]:
@@ -215,7 +199,11 @@ def _load_data(cfg: RunConfig, contexts: tuple[int, ...]) -> tuple[dict[str, Ser
         for context in contexts:
             if cfg.multi:
                 windows = build_multi_windows(
-                    series_set, context, cfg.horizon, cfg.windows
+                    series_set,
+                    context,
+                    cfg.horizon,
+                    cfg.windows,
+                    mode=cfg.window_mode,
                 )
             else:
                 windows = build_windows(
@@ -227,13 +215,8 @@ def _load_data(cfg: RunConfig, contexts: tuple[int, ...]) -> tuple[dict[str, Ser
                 )
             if windows is None:
                 continue
-            x, y, s, channels = windows
-            groups = (
-                np.arange(len(x), dtype=np.int64)
-                if cfg.multi
-                else _window_groups(channels)
-            )
-            eval_data[(name, context)] = EvalData(x, y, s, groups)
+            x, y, s, _channels, origins = windows
+            eval_data[(name, context)] = EvalData(x, y, s, origins)
     return sets, eval_data
 
 
@@ -246,6 +229,13 @@ def _flatten(pred: np.ndarray, targets: np.ndarray, scales: np.ndarray):
             scales.reshape(-1),
         )
     return pred, targets, scales
+
+
+def _stacked_groups(data: EvalData) -> np.ndarray:
+    """Repeat each origin id over its variates, matching ``_flatten``'s order."""
+    if data.contexts.ndim == 3:
+        return np.repeat(data.groups, data.contexts.shape[1])
+    return data.groups
 
 
 def _accuracy(
@@ -273,13 +263,7 @@ def _accuracy(
             float(value)
             for value in metrics.window_pinball(flat_pred, flat_targets, flat_scales)
         ]
-        if data.contexts.ndim == 3:
-            groups = np.repeat(
-                np.arange(len(data.contexts)), data.contexts.shape[1]
-            )
-        else:
-            groups = data.groups
-        m["window_group"] = groups.tolist()
+        m["window_group"] = _stacked_groups(data).tolist()
         per_dataset.setdefault(name, {})[str(context)] = m
     macro: dict[str, dict] = {}
     for context in contexts:

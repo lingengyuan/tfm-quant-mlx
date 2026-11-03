@@ -203,8 +203,9 @@ def _paired_table(
     """Paired window bootstrap of pinball differences against fp32.
 
     Resampling happens per forecast origin, not per channel: channels at one
-    origin are correlated. The point estimate and every draw average datasets
-    with equal weight, matching the main tables' macro delta.
+    origin are correlated. Each draw recomputes both means, and resampled
+    origins keep their window counts, so the estimate stays the window mean the
+    main tables report. Datasets keep equal weight in the macro delta.
     """
     if ref is None:
         return "_no data_"
@@ -222,22 +223,33 @@ def _paired_table(
                 reference = _get(ref, "accuracy", dataset, str(context), "window_pinball")
                 if not current or not reference or len(current) != len(reference):
                     continue
-                diff = np.asarray(current) - np.asarray(reference)
+                candidate = np.asarray(current, dtype=float)
+                base_values = np.asarray(reference, dtype=float)
                 groups = _get(run, "accuracy", dataset, str(context), "window_group")
-                if not groups or len(groups) != len(diff):
-                    groups = np.arange(len(diff))
-                groups = np.asarray(groups)
-                base = max(float(np.mean(reference)), 1e-12)
-                origins = np.unique(groups)
-                origin_diff = np.array(
-                    [diff[groups == origin].mean() for origin in origins]
+                if not groups or len(groups) != len(candidate):
+                    groups = np.arange(len(candidate))
+                _, origin_index = np.unique(np.asarray(groups), return_inverse=True)
+                origin_count = int(origin_index.max()) + 1
+                counts = np.bincount(origin_index, minlength=origin_count).astype(float)
+                candidate_sum = np.bincount(
+                    origin_index, weights=candidate, minlength=origin_count
                 )
-                # Equal-size groups make the origin mean equal the window mean.
-                picked = rng.integers(0, len(origins), (draws, len(origins)))
+                base_sum = np.bincount(
+                    origin_index, weights=base_values, minlength=origin_count
+                )
+                base_mean = float(base_values.mean())
+                point_deltas.append(
+                    100.0 * (float(candidate.mean()) - base_mean) / max(base_mean, 1e-12)
+                )
+                picked = rng.integers(0, origin_count, (draws, origin_count))
+                drawn_count = counts[picked].sum(axis=1)
+                drawn_candidate = candidate_sum[picked].sum(axis=1) / drawn_count
+                drawn_base = base_sum[picked].sum(axis=1) / drawn_count
                 draw_deltas.append(
-                    100.0 * origin_diff[picked].mean(axis=1) / base
+                    100.0
+                    * (drawn_candidate - drawn_base)
+                    / np.maximum(drawn_base, 1e-12)
                 )
-                point_deltas.append(100.0 * float(origin_diff.mean()) / base)
             if not point_deltas:
                 continue
             point = float(np.mean(point_deltas))
@@ -474,7 +486,7 @@ def generate(path: str) -> str:
         parts += [
             "## 配对差异（95% bootstrap CI）",
             "",
-            "按预测时点重采样 2000 次，Δ 相对 fp32；CI 不含 0 表示差异稳定。",
+            "按预测时点重采样 2000 次，每次重算候选与 fp32 的均值及相对变化；CI 不含 0 表示差异稳定。",
             "",
             paired,
             "",

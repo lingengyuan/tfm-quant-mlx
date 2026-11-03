@@ -183,3 +183,58 @@ def test_paired_ci_resamples_origins_not_channels(tmp_path):
     row = next(line for line in text.splitlines() if "| int8_g64 | 512 |" in line)
     assert "+5.00%" in row
     assert "[+0.00%, +10.00%]" in row
+
+
+def test_paired_ci_weights_origins_by_window_count(tmp_path):
+    data = _paired_data()
+    quantized = data["weight_runs"][1]
+    # Origin 0 keeps three channels and origin 1 keeps one. The window mean is
+    # +25%; an origin mean would report +50%.
+    quantized["accuracy"] = {
+        "ETTh2": {},
+        "ETTh1": {
+            "512": {
+                **quantized["accuracy"]["ETTh1"]["512"],
+                "window_pinball": [0.10, 0.10, 0.10, 0.20],
+                "window_group": [0, 0, 0, 1],
+                "pinball": 0.125,
+            }
+        },
+    }
+    reference = data["weight_runs"][0]
+    reference["accuracy"] = {
+        "ETTh2": {},
+        "ETTh1": {
+            "512": {
+                **reference["accuracy"]["ETTh1"]["512"],
+                "window_pinball": [0.10, 0.10, 0.10, 0.10],
+                "window_group": [0, 0, 0, 1],
+            }
+        },
+    }
+    path = tmp_path / "results.json"
+    path.write_text(json.dumps(data))
+    text = report.generate(str(path))
+    row = next(line for line in text.splitlines() if "| int8_g64 | 512 |" in line)
+    assert "| +25.00% |" in row
+
+
+def test_paired_ci_resamples_the_reference_mean(tmp_path):
+    data = _paired_data()
+    reference = data["weight_runs"][0]
+    quantized = data["weight_runs"][1]
+    # Origin 0 sits at 0.10 and origin 1 at 0.20; only origin 0 changes. A drawn
+    # pair must divide by the sampled reference mean, not the fixed one.
+    for entry, pinballs in (
+        (reference, [0.10, 0.10, 0.20, 0.20]),
+        (quantized, [0.11, 0.11, 0.20, 0.20]),
+    ):
+        both = {"ETTh1": {"512": {**entry["accuracy"]["ETTh1"]["512"], "window_pinball": pinballs}}}
+        both["ETTh2"] = both["ETTh1"]
+        entry["accuracy"] = both
+    path = tmp_path / "results.json"
+    path.write_text(json.dumps(data))
+    text = report.generate(str(path))
+    row = next(line for line in text.splitlines() if "| int8_g64 | 512 |" in line)
+    assert "| +3.33% |" in row
+    assert "[+0.00%, +10.00%]" in row
