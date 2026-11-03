@@ -45,6 +45,14 @@ def _cmd_report(args) -> int:
     return 0
 
 
+def _cmd_attention_compare(args) -> int:
+    from .attention_compare import write as write_compare
+
+    text = write_compare(args.manual, args.sdpa, args.out)
+    print(f"wrote {args.out} ({len(text.splitlines())} lines)")
+    return 0
+
+
 def _cmd_sanity(args) -> int:
     import mlx.core as mx
     import numpy as np
@@ -74,6 +82,8 @@ def _cmd_sensitivity(args) -> int:
 
     cfg = SensitivityConfig(
         checkpoint=args.checkpoint,
+        datasets=tuple(args.datasets.split(",")),
+        synthetic=args.synthetic,
         context=args.context,
         offset=args.offset,
         out=args.out,
@@ -91,6 +101,8 @@ def _cmd_kv_sensitivity(args) -> int:
 
     cfg = KVSensitivityConfig(
         checkpoint=args.checkpoint,
+        datasets=tuple(args.datasets.split(",")),
+        synthetic=args.synthetic,
         context=args.context,
         kv=args.kv,
         windows=args.windows,
@@ -216,6 +228,8 @@ def main(argv: list[str] | None = None) -> int:
 
     sens_p = sub.add_parser("sensitivity", help="layer-wise 4-bit sensitivity probe")
     sens_p.add_argument("--checkpoint", default="models/timesfm-3.0")
+    sens_p.add_argument("--datasets", default="ETTh1", help="comma separated")
+    sens_p.add_argument("--no-synthetic", dest="synthetic", action="store_false")
     sens_p.add_argument("--context", type=int, default=2048)
     sens_p.add_argument("--offset", type=int, default=0, help="recent windows reserved for evaluation")
     sens_p.add_argument("--out", default="results/sensitivity.json")
@@ -228,6 +242,8 @@ def main(argv: list[str] | None = None) -> int:
 
     kvs_p = sub.add_parser("kv-sensitivity", help="layer and head sensitivity of KV compression")
     kvs_p.add_argument("--checkpoint", default="models/timesfm-3.0")
+    kvs_p.add_argument("--datasets", default="ETTh1", help="comma separated")
+    kvs_p.add_argument("--no-synthetic", dest="synthetic", action="store_false")
     kvs_p.add_argument("--context", type=int, default=15360)
     kvs_p.add_argument("--kv", default="affine4")
     kvs_p.add_argument("--windows", type=int, default=4)
@@ -289,6 +305,14 @@ def main(argv: list[str] | None = None) -> int:
     hor_p.add_argument("--out", default="results/horizon.json")
     hor_p.add_argument("--md", default="results/horizon.md")
     hor_p.set_defaults(func=_cmd_horizon)
+
+    att_p = sub.add_parser(
+        "attention-compare", help="compare manual and SDPA result files"
+    )
+    att_p.add_argument("manual")
+    att_p.add_argument("sdpa")
+    att_p.add_argument("-o", "--out", default="results/attention.md")
+    att_p.set_defaults(func=_cmd_attention_compare)
 
     args = parser.parse_args(argv)
     return args.func(args)

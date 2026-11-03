@@ -15,12 +15,13 @@ The Chinese README ([README.md](README.md)) carries the full tables and per-sect
 - Plain `int4`: 191–251 MB, pinball +10–12%, quantile crossing 9–19%. Loss concentrates in the last layer (+7.9%) and the output head (+67.8% at 4-bit).
 - 4-bit that works: `mix_l18_19_8` 227 MB (5.82×), +0.80%; clipping 0.95 (`mix_l18_19_8c95`) reaches −0.22% on ETT and +0.61% on Jena, but is worse on traffic (+2.00%).
 - KV: `affine8` 1.78× (−0.01%), `affine4` 3.20× (+0.52%), `turbo3_mse` 3.10× (+2.71%). `qjl1` also reaches 1.78× but compresses only K, so it stays the worst at that ratio (+4.73%).
-- KV error also concentrates in the last block: keeping layer 19 at fp16 moves `affine4` from +0.52% to **−0.36%** (137 MB, 2.88×) and `turbo3_mse` from +2.71% to +0.69% (141 MB, 2.80×).
+- KV error also concentrates in the last block: keeping layer 19 at fp16 moves `affine4` from +0.52% to **−0.36%** (137 MB, 2.88×) and `turbo3_mse` from +2.71% to +0.69% (141 MB, 2.80×). A held-out ETTh2 run does not reproduce this: keeping layer 19 recovers 0.45 pp, while layer 01 recovers the most.
 - Multivariate: fp32 pinball 0.1152 vs 0.1168 univariate; KV loss grows ~6× because variate attention is sensitive. Sequence `affine4` + variate `affine8` gives +1.15% at 2.29×.
 - Covariates: dropping them costs +4.98% pinball; int4 rises to +17.2%, while the seq/var KV mix stays at −0.91%.
 - Throughput does not improve: at 482 tokens the three precisions differ by ≤3%; end-to-end differences stay ≤7%. The gain from 4-bit is memory (2774 → 1717 MB).
 - Cross-backend baseline: MLX fp32 vs PyTorch on 56 series, mean normalized deviation 0.0013 (max 0.0081), pinball difference −0.001%.
 - Naive baseline: on exchange at context 2,048, fp32 point nMAE (0.3126) is 15.0% worse than repeating the last value (0.2718), while its pinball is 18.0% better. Point forecasts lose there; quantile forecasts still win.
+- SDPA backend: differences stay ≤0.02% without KV compression, but reach +0.47% (`affine4`) and +0.76% (last-block fp16) at context 15,360. Treat it as a speed option, not a numerically equivalent swap.
 
 ## Results
 
@@ -89,6 +90,11 @@ done
 # forecast a CSV
 .venv/bin/tfmq predict data.csv --context 2048 --horizon 64 \
   --weights int8_g64 --kv affine4 -o forecasts.csv
+
+# attention backend comparison
+.venv/bin/tfmq run --config configs/attention_manual.yaml
+.venv/bin/tfmq run --config configs/attention_sdpa.yaml
+.venv/bin/tfmq attention-compare results/attention_manual.json results/attention_sdpa.json
 ```
 
 `predict` decodes each numeric column independently by default and batches equal-length columns (`--batch`, default 8). `--attention sdpa` selects the fused MLX kernel; it is not bit-identical to the manual path, especially with KV compression. `--multi` decodes columns together as variates; `--covariates` uses the last column as the target and the others as past-only covariates.
@@ -120,6 +126,7 @@ src/tfmlab/
   horizon.py          horizons 64/256/1024
   predict.py          CSV forecasting CLI
   attention.py        attention patch and KV installation
+  attention_compare.py  manual vs SDPA result comparison
   runtime.py          loading, inference, timing, memory
   metrics.py          point and quantile metrics
   runner.py           grid execution

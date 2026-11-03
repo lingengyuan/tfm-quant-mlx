@@ -1,0 +1,15 @@
+# Attention-backend comparison: manual matmul-softmax path. Run with
+# configs/attention_sdpa.yaml, then `tfmq attention-compare`.
+datasets: [ETTh1]
+synthetic: false
+contexts: [2048, 15360]
+windows: 4
+weights: [fp32, mix_l18_19_8]
+kv: [affine4, affine4_l19fp16]
+kv_contexts: [15360]
+throughput_contexts: [2048]
+throughput_batches: [1]
+repeats: 1
+eval_batch: 16
+attention: manual
+out: results/attention_manual.json

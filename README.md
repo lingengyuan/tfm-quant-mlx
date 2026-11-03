@@ -15,7 +15,7 @@
 - 纯 `int4`：191–251 MB（5.3–6.9×），pinball +10–12%，逆序率 9–19%。损失集中在末层（单独 4-bit +7.9%）和输出头（4-bit +67.8%）。
 - 4-bit 体积下默认用 `mix_l18_19_8`（227 MB，5.82×，+0.80%）。裁剪 0.95 的 `mix_l18_19_8c95` 在 ETT/Jena 上到 −0.22% / +0.61%，但在 traffic 上更差（+2.00%），不是通用默认。
 - KV：`affine8` 1.78×（−0.01%）、`affine4` 3.20×（+0.52%）、`turbo3_mse` 3.10×（+2.71%）；`qjl1` 同为 1.78×，但只压 K、V 留 fp16，误差 +4.73%，是同压缩比下最差档。
-- KV 末层：第 19 层留 fp16，`affine4` 从 +0.52% 降到 **−0.36%**（137 MB，2.88×）；`turbo3_mse` 从 +2.71% 降到 +0.69%（141 MB，2.80×）。逐头误差分散，无单头主导。
+- KV 末层：第 19 层留 fp16，`affine4` 从 +0.52% 降到 **−0.36%**（137 MB，2.88×）；`turbo3_mse` 从 +2.71% 降到 +0.69%（141 MB，2.80×）。该结论在 ETTh2 留出集上未复现：保留第 19 层只回收 0.45 pp，最大回收来自第 01 层。逐头误差分散，无单头主导。
 - 组合：`mix_l18_19_8 + affine4_l19fp16` 的 pinball +0.82%，权重 227 MB、KV 137 MB、峰值 1755 MB（fp32 2774 MB）。
 - 多变量（ETT 7 通道同批）：fp32 pinball 0.1152，优于单变量 0.1168；KV 压缩损失放大约 6 倍，主要来自 variate attention；seq 用 `affine4`、var 用 `affine8` 后为 +1.15%（2418 MB，2.29×）。
 - 协变量：去掉协变量 pinball +4.98%；带上协变量后 int8 +0.35%、int4 +17.2%、mix −0.87%；KV `affine4` +3.55%，seq/var 混合 −0.91%。
@@ -24,7 +24,7 @@
 - 量化不提速：模型层 GEMM 只有 482 token，三档差异 ≤3%；端到端差异 ≤7%，没有稳定收益。4-bit 的收益在显存（2774 → 1717 MB），不在吞吐。
 - 基准对齐：MLX fp32 与 PyTorch 后端在 4 个 ETT 的 56 条序列上平均归一化偏差 0.0013、最大 0.0081，pinball 差 −0.001%（ctx 15,360）。
 
-选择：权重用 `int8_g64` 或 `mix_l18_19_8`；单变量 KV 用 19 层 `affine4` + 末层 fp16；多变量 KV 用 seq `affine4` + var `affine8`。
+选择：权重用 `int8_g64` 或 `mix_l18_19_8`；单变量 KV 用 19 层 `affine4` + 末层 fp16（ETTh1 上验证，ETTh2 留出未复现，跨数据集需重新确认）；多变量 KV 用 seq `affine4` + var `affine8`。
 
 ## 结果
 
@@ -107,6 +107,23 @@ MLX 的 `nn.quantize` 把 Linear 换成 `nn.QuantizedLinear`，矩阵乘走 `mx.
 - KV 提速需要“解压 + 注意力”融合的自定义 kernel，本仓库没有实现。
 - `tfmq profile` 复现上表，输出 [`results/profile.json`](results/profile.json)。
 
+### SDPA 后端（ETTh1，上下文 2,048 / 15,360）
+
+同一配置分别跑手写注意力与 `mx.fast.scaled_dot_product_attention`。
+
+| 配置 | 上下文 | manual pinball | sdpa pinball | Δpinball | ΔnMAE |
+|---|---|---|---|---|---|
+| fp32 | 2048 | 0.1492 | 0.1492 | −0.01% | −0.01% |
+| fp32 | 15360 | 0.1373 | 0.1373 | −0.00% | −0.00% |
+| mix_l18_19_8 | 2048 | 0.1531 | 0.1530 | −0.02% | −0.01% |
+| mix_l18_19_8 | 15360 | 0.1384 | 0.1384 | −0.00% | −0.00% |
+| affine4 | 15360 | 0.1374 | 0.1380 | +0.47% | +0.65% |
+| affine4_l19fp16 | 15360 | 0.1364 | 0.1374 | +0.76% | +0.52% |
+
+- 不压缩 KV 时两种路径的差异 ≤0.02%，SDPA 可以当等价加速档。
+- 压缩 KV 后差异升到 +0.47% / +0.76%，不能把 SDPA 当作数值等价的替换。组合使用需要单独评测。
+- 完整表见 [`results/attention.md`](results/attention.md)。
+
 ### 逐层 4-bit 敏感度（上下文 2,048）
 
 | 组件 | bits | Δpinball | cross % |
@@ -154,7 +171,20 @@ MLX 的 `nn.quantize` 把 Linear 换成 `nn.QuantizedLinear`，矩阵乘走 `mx.
 - `affine4` 下逐层误差不可加：单层合计 +1.39%，大于全量 +0.65%；只有保留第 19 层稳定回收（+0.95 pp）。
 - 逐头误差分散，16 头合计与全量同量级或更高，没有单头占主导；按头混合精度的收益低于按层。
 
-完整表：[`results/kv_sensitivity.md`](results/kv_sensitivity.md)、[`results/kv_sensitivity_turbo3.md`](results/kv_sensitivity_turbo3.md)。
+留出验证：策略选择用 ETTh1 + synthetic，验证用未参与选择的 ETTh2（affine4，3 个窗口）。
+
+| 指标 | ETTh1 + synthetic | ETTh2（留出） |
+|---|---|---|
+| 全量压缩 Δpinball | +0.652% | +0.980% |
+| 只压第 19 层 | +0.778% | +0.354% |
+| 第 19 层不压 | −0.301% | +0.531% |
+| 保留第 19 层回收 | +0.95 pp | +0.45 pp |
+| 单层误差最大 | 第 19 层 +0.778% | 第 17 层 +0.423% |
+| 保留单层回收最大 | — | 第 01 层 +1.282 pp |
+
+第 19 层在 ETTh2 上仍是单层误差第二（+0.354%），但保留它只回收 0.45 pp；最大回收来自第 01 层。第 19 层 fp16 的策略在 ETTh2 上没有复现，按层混合精度需要逐数据集验证。
+
+完整表：[`results/kv_sensitivity.md`](results/kv_sensitivity.md)、[`results/kv_sensitivity_turbo3.md`](results/kv_sensitivity_turbo3.md)、[`results/kv_sensitivity_holdout.md`](results/kv_sensitivity_holdout.md)。
 
 ### 权重 + KV 组合（上下文 15,360）
 
@@ -357,6 +387,11 @@ done
 .venv/bin/tfmq kv-sensitivity --kv turbo3_mse \
   --out results/kv_sensitivity_turbo3.json --md results/kv_sensitivity_turbo3.md
 .venv/bin/tfmq kv-sensitivity --kv affine4 --offset 6  # 留出最近 6 个窗口
+
+.venv/bin/tfmq run --config configs/attention_manual.yaml
+.venv/bin/tfmq run --config configs/attention_sdpa.yaml
+.venv/bin/tfmq attention-compare results/attention_manual.json results/attention_sdpa.json \
+  -o results/attention.md
 .venv/bin/tfmq profile
 .venv/bin/tfmq parity  # 需要 torch：uv pip install -e ".[parity]"
 .venv/bin/tfmq covariates
@@ -421,6 +456,7 @@ src/tfmlab/
   horizon.py         更长 horizon 下的量化与 KV
   predict.py         CSV 预测命令
   attention.py       注意力补丁
+  attention_compare.py  manual 与 SDPA 结果对比
   runtime.py         加载、推理、计时、显存
   metrics.py         点预测与分位数指标
   runner.py          网格执行

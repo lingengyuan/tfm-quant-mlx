@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.4 — 2026-11-03
+
+- 新增 `attention-compare` 命令与 `configs/attention_manual.yaml`、`configs/attention_sdpa.yaml`。
+- 实测无 KV 时 manual / SDPA 差 ≤0.02%；KV 压缩后为 +0.47%（`affine4`）与 +0.76%（第 19 层 fp16）。
+- `sensitivity` / `kv-sensitivity` 新增 `--datasets` 与 `--no-synthetic`，支持按数据集留出验证。
+- ETTh2 留出验证：第 19 层策略未复现，保留第 19 层回收 0.45 pp（ETTh1 为 0.95 pp）。
+
 ## 0.1.3 — 2026-11-03
 
 - CSV 预测按序列长度合批（`--batch`，默认 8），输出顺序不变；batch 1 与 batch 8 输出一致。
