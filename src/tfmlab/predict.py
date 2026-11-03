@@ -38,6 +38,9 @@ class PredictConfig:
     multi: bool = False
     covariates: bool = False
     period: float = 24.0
+    target: str | None = None
+    future_covariates: tuple[str, ...] = ()
+    time: str | None = None
 
 
 def series_from_frame(frame: pd.DataFrame, context: int) -> dict[str, np.ndarray]:
@@ -95,6 +98,104 @@ def format_forecast(name: str, pred: np.ndarray) -> pd.DataFrame:
     return frame
 
 
+def covariate_arrays(
+    frame: pd.DataFrame,
+    context: int,
+    horizon: int,
+    target_name: str | None = None,
+    future_names: tuple[str, ...] = (),
+    period: float = 24.0,
+    time_name: str | None = None,
+) -> tuple[str, np.ndarray, np.ndarray, np.ndarray, dict[str, np.ndarray | None]]:
+    """Target history, past-only and past-future covariates, plus masks.
+
+    Missing values stay in place and are masked, so gaps do not compress the
+    time axis. With explicit future covariates the last ``horizon`` rows hold
+    their forecast values and the target history ends before them.
+    """
+    numeric = frame.select_dtypes(include=[np.number])
+    if numeric.shape[1] == 0:
+        raise ValueError("input has no numeric columns")
+    times = None
+    if time_name is not None:
+        if time_name not in frame.columns:
+            raise ValueError(f"time column not found: {time_name}")
+        stamps = pd.to_datetime(frame[time_name])
+        order = stamps.argsort()
+        numeric = numeric.iloc[order].reset_index(drop=True)
+        times = stamps.iloc[order].reset_index(drop=True)
+    if target_name is not None:
+        if target_name not in numeric.columns:
+            raise ValueError(f"target column not found: {target_name}")
+        target = str(target_name)
+    else:
+        target = str(numeric.columns[-1])
+    missing_future = [name for name in future_names if name not in numeric.columns]
+    if missing_future:
+        raise ValueError(f"future covariates not found: {missing_future}")
+
+    rows = len(numeric)
+    hist_end = rows - horizon if future_names else rows
+    hist_start = hist_end - context
+    if hist_start < 0:
+        raise ValueError(
+            f"need {context + (horizon if future_names else 0)} rows, found {rows}"
+        )
+
+    def _values(columns: list[str], start: int, end: int) -> tuple[np.ndarray, np.ndarray]:
+        block = numeric[columns].iloc[start:end].to_numpy(dtype=np.float32)
+        mask = ~np.isfinite(block)
+        return np.nan_to_num(block, nan=0.0, posinf=0.0, neginf=0.0), mask
+
+    target_block, target_mask = _values([target], hist_start, hist_end)
+    target_values = target_block[:, 0]
+    target_mask = target_mask[:, 0]
+    past_names = [
+        str(column)
+        for column in numeric.columns
+        if str(column) != target and str(column) not in future_names
+    ]
+    if past_names:
+        past_block, past_mask = _values(past_names, hist_start, hist_end)
+        past_only = past_block.T
+        past_only_mask = past_mask.T
+    else:
+        past_only = np.zeros((0, context), dtype=np.float32)
+        past_only_mask = np.zeros((0, context), dtype=bool)
+
+    length = context + horizon
+    if future_names:
+        future_block, future_mask = _values(list(future_names), hist_start, rows)
+        past_future = future_block.T
+        past_future_mask = future_mask.T
+    else:
+        past_future = np.zeros((0, length), dtype=np.float32)
+        past_future_mask = np.zeros((0, length), dtype=bool)
+
+    index = np.arange(length, dtype=np.float64)
+    if times is not None:
+        stamps = times.iloc[hist_start:hist_end]
+        hours = (stamps - stamps.iloc[0]).dt.total_seconds().to_numpy() / 3600.0
+        step = float(np.median(np.diff(np.sort(np.unique(hours))))) if len(hours) > 1 else 1.0
+        index = np.concatenate([hours, hours[-1] + step * np.arange(1, horizon + 1)])
+    calendar = np.stack(
+        [
+            np.sin(2.0 * np.pi * index / period),
+            np.cos(2.0 * np.pi * index / period),
+        ]
+    ).astype(np.float32)
+    past_future = np.concatenate([past_future, calendar], axis=0)
+    past_future_mask = np.concatenate(
+        [past_future_mask, np.zeros_like(calendar, dtype=bool)], axis=0
+    )
+    masks = {
+        "target": target_mask,
+        "past_only": past_only_mask,
+        "past_future": past_future_mask,
+    }
+    return target, target_values, past_only, past_future, masks
+
+
 def _batched_forecasts(
     model, series: dict[str, np.ndarray], horizon: int, batch: int
 ) -> list[pd.DataFrame]:
@@ -122,6 +223,8 @@ def _validate(cfg: PredictConfig) -> None:
         raise ValueError("batch must be positive")
     if cfg.covariates and cfg.period <= 0:
         raise ValueError("period must be positive in covariates mode")
+    if (cfg.target or cfg.future_covariates or cfg.time) and not cfg.covariates:
+        raise ValueError("target, future-covariates, and time need --covariates")
     if cfg.attention not in ("manual", "sdpa"):
         raise ValueError(f"unknown attention backend: {cfg.attention}")
 
@@ -143,23 +246,28 @@ def run(cfg: PredictConfig) -> pd.DataFrame:
         outputs = [format_forecast(name, pred[i]) for i, name in enumerate(names)]
         series = {name: None for name in names}
     elif cfg.covariates:
-        names, contexts, length = stacked_series(frame, cfg.context)
-        if len(names) < 2:
-            raise ValueError("covariates mode needs at least two numeric columns")
-        t = np.arange(length + cfg.horizon)
-        past_future = np.stack(
-            [np.sin(2.0 * np.pi * t / cfg.period), np.cos(2.0 * np.pi * t / cfg.period)]
-        ).astype(np.float32)
+        target, values, past_only, past_future, masks = covariate_arrays(
+            frame,
+            cfg.context,
+            cfg.horizon,
+            cfg.target,
+            tuple(cfg.future_covariates),
+            cfg.period,
+            cfg.time,
+        )
         pred = predict_with_covariates(
             model,
-            contexts[-1][None],
-            contexts[:-1][None],
-            past_future[None],
+            values[None],
+            past_only[None] if past_only.size else None,
+            past_future[None] if past_future.size else None,
             cfg.horizon,
             1,
+            target_mask=masks["target"][None],
+            past_only_mask=masks["past_only"][None] if past_only.size else None,
+            past_future_mask=masks["past_future"][None] if past_future.size else None,
         )[0]
-        outputs = [format_forecast(names[-1], pred)]
-        series = {names[-1]: None}
+        outputs = [format_forecast(target, pred)]
+        series = {target: None}
     else:
         series = series_from_frame(frame, cfg.context)
         outputs = _batched_forecasts(model, series, cfg.horizon, cfg.batch)

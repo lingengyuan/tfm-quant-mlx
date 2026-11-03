@@ -114,6 +114,13 @@ def _clip_groups(weight, group_size: int, fraction: float):
 
 def apply_weight_spec(model, spec: WeightSpec) -> None:
     """Mutate ``model`` in place. The caller must invalidate ``_compiled_forward``."""
+    stored = getattr(model, "_tfmlab_spec_name", None)
+    if stored is not None:
+        if spec.name != stored:
+            raise ValueError(
+                f"converted checkpoint stores {stored} weights; pass --weights {stored}"
+            )
+        return
     if spec.bits:
         prefixes = spec.skip_prefixes
         head = spec.quantize_head

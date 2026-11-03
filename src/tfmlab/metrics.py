@@ -60,6 +60,13 @@ def evaluate(pred: np.ndarray, target: np.ndarray, scales: np.ndarray) -> Metric
     )
 
 
+def window_pinball(pred: np.ndarray, target: np.ndarray, scales: np.ndarray) -> np.ndarray:
+    """Per-series pinball loss, for paired comparisons across runs."""
+    ordered = np.sort(np.asarray(pred), axis=-1)
+    loss = _pinball(target, ordered, TAUS) / scales[:, None, None]
+    return loss.mean(axis=(1, 2))
+
+
 def baseline(contexts: np.ndarray, target: np.ndarray, scales: np.ndarray) -> Metrics:
     """Forecast that repeats the last context value for every step.
 

@@ -226,6 +226,10 @@ def _accuracy(
         else:
             flat_ref, _, _ = _flatten(ref[(name, context)], data.targets, data.scales)
             m = metrics.compare(flat_pred, flat_ref, flat_targets, flat_scales)
+        m["window_pinball"] = [
+            float(value)
+            for value in metrics.window_pinball(flat_pred, flat_targets, flat_scales)
+        ]
         per_dataset.setdefault(name, {})[str(context)] = m
     macro: dict[str, dict] = {}
     for context in contexts:

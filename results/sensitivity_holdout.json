@@ -1,0 +1,226 @@
+{
+  "created": "2026-11-03T12:24:55+0800",
+  "config": {
+    "checkpoint": "models/timesfm-3.0",
+    "data_dir": "data/raw",
+    "datasets": [
+      "ETTh2"
+    ],
+    "synthetic": false,
+    "context": 2048,
+    "horizon": 64,
+    "windows": 2,
+    "offset": 0,
+    "batch": 32,
+    "bits": 4,
+    "group_size": 64,
+    "out": "results/sensitivity_holdout.json"
+  },
+  "baseline": {
+    "pinball": 0.2629343569278717,
+    "nmae": 0.6584392786026001,
+    "crossing_rate": 0.004603794642857143
+  },
+  "tests": [
+    {
+      "name": "layer00",
+      "bits": 4,
+      "weight_bytes": 1267547904,
+      "pinball": 0.2627444565296173,
+      "pinball_delta_pct": -0.07222350113282766,
+      "crossing_rate": 0.004464285714285714
+    },
+    {
+      "name": "layer01",
+      "bits": 4,
+      "weight_bytes": 1267547904,
+      "pinball": 0.26223206520080566,
+      "pinball_delta_pct": -0.2670977407713565,
+      "crossing_rate": 0.004464285714285714
+    },
+    {
+      "name": "layer02",
+      "bits": 4,
+      "weight_bytes": 1267547904,
+      "pinball": 0.2626343071460724,
+      "pinball_delta_pct": -0.11411585207239625,
+      "crossing_rate": 0.004045758928571429
+    },
+    {
+      "name": "layer03",
+      "bits": 4,
+      "weight_bytes": 1267547904,
+      "pinball": 0.26293739676475525,
+      "pinball_delta_pct": 0.0011561200746309512,
+      "crossing_rate": 0.004324776785714286
+    },
+    {
+      "name": "layer04",
+      "bits": 4,
+      "weight_bytes": 1267547904,
+      "pinball": 0.26152878999710083,
+      "pinball_delta_pct": -0.5345695203903877,
+      "crossing_rate": 0.004464285714285714
+    },
+    {
+      "name": "layer05",
+      "bits": 4,
+      "weight_bytes": 1267547904,
+      "pinball": 0.263277530670166,
+      "pinball_delta_pct": 0.13051688881740592,
+      "crossing_rate": 0.004185267857142857
+    },
+    {
+      "name": "layer06",
+      "bits": 4,
+      "weight_bytes": 1267547904,
+      "pinball": 0.26176539063453674,
+      "pinball_delta_pct": -0.44458484124827874,
+      "crossing_rate": 0.004603794642857143
+    },
+    {
+      "name": "layer07",
+      "bits": 4,
+      "weight_bytes": 1267547904,
+      "pinball": 0.2634565234184265,
+      "pinball_delta_pct": 0.19859195909420485,
+      "crossing_rate": 0.004045758928571429
+    },
+    {
+      "name": "layer08",
+      "bits": 4,
+      "weight_bytes": 1267547904,
+      "pinball": 0.26251253485679626,
+      "pinball_delta_pct": -0.16042866212084786,
+      "crossing_rate": 0.004324776785714286
+    },
+    {
+      "name": "layer09",
+      "bits": 4,
+      "weight_bytes": 1267547904,
+      "pinball": 0.2635544538497925,
+      "pinball_delta_pct": 0.23583716071417843,
+      "crossing_rate": 0.004464285714285714
+    },
+    {
+      "name": "layer10",
+      "bits": 4,
+      "weight_bytes": 1267547904,
+      "pinball": 0.2643499970436096,
+      "pinball_delta_pct": 0.5384005849514197,
+      "crossing_rate": 0.004324776785714286
+    },
+    {
+      "name": "layer11",
+      "bits": 4,
+      "weight_bytes": 1267547904,
+      "pinball": 0.26227742433547974,
+      "pinball_delta_pct": -0.24984661573617703,
+      "crossing_rate": 0.004324776785714286
+    },
+    {
+      "name": "layer12",
+      "bits": 4,
+      "weight_bytes": 1267547904,
+      "pinball": 0.2639042139053345,
+      "pinball_delta_pct": 0.3688589763599514,
+      "crossing_rate": 0.004324776785714286
+    },
+    {
+      "name": "layer13",
+      "bits": 4,
+      "weight_bytes": 1267547904,
+      "pinball": 0.2627018690109253,
+      "pinball_delta_pct": -0.08842051668819657,
+      "crossing_rate": 0.004185267857142857
+    },
+    {
+      "name": "layer14",
+      "bits": 4,
+      "weight_bytes": 1267547904,
+      "pinball": 0.26277047395706177,
+      "pinball_delta_pct": -0.06232847343525098,
+      "crossing_rate": 0.004324776785714286
+    },
+    {
+      "name": "layer15",
+      "bits": 4,
+      "weight_bytes": 1267547904,
+      "pinball": 0.2634652256965637,
+      "pinball_delta_pct": 0.20190163617059934,
+      "crossing_rate": 0.004603794642857143
+    },
+    {
+      "name": "layer16",
+      "bits": 4,
+      "weight_bytes": 1267547904,
+      "pinball": 0.2636597454547882,
+      "pinball_delta_pct": 0.2758819864364446,
+      "crossing_rate": 0.0037667410714285715
+    },
+    {
+      "name": "layer17",
+      "bits": 4,
+      "weight_bytes": 1267547904,
+      "pinball": 0.26373109221458435,
+      "pinball_delta_pct": 0.3030168046586652,
+      "crossing_rate": 0.0034877232142857145
+    },
+    {
+      "name": "layer18",
+      "bits": 4,
+      "weight_bytes": 1267547904,
+      "pinball": 0.26357924938201904,
+      "pinball_delta_pct": 0.2452674734797956,
+      "crossing_rate": 0.003627232142857143
+    },
+    {
+      "name": "layer19",
+      "bits": 4,
+      "weight_bytes": 1267547904,
+      "pinball": 0.269056499004364,
+      "pinball_delta_pct": 2.3283918267751287,
+      "crossing_rate": 0.09946986607142858
+    },
+    {
+      "name": "all_attn",
+      "bits": 4,
+      "weight_bytes": 438107904,
+      "pinball": 0.26693081855773926,
+      "pinball_delta_pct": 1.5199465283130973,
+      "crossing_rate": 0.011858258928571428
+    },
+    {
+      "name": "all_ffn",
+      "bits": 4,
+      "weight_bytes": 1101659904,
+      "pinball": 0.2660152316093445,
+      "pinball_delta_pct": 1.171727695638469,
+      "crossing_rate": 0.08035714285714286
+    },
+    {
+      "name": "resblock",
+      "bits": 4,
+      "weight_bytes": 1315655424,
+      "pinball": 0.269764244556427,
+      "pinball_delta_pct": 2.5975637829744995,
+      "crossing_rate": 0.004603794642857143
+    },
+    {
+      "name": "head8",
+      "bits": 8,
+      "weight_bytes": 1320724224,
+      "pinball": 0.2628210783004761,
+      "pinball_delta_pct": -0.043082474545806326,
+      "crossing_rate": 0.023577008928571428
+    },
+    {
+      "name": "head4",
+      "bits": 4,
+      "weight_bytes": 1320355584,
+      "pinball": 0.34640583395957947,
+      "pinball_delta_pct": 31.746127819502,
+      "crossing_rate": 0.3461216517857143
+    }
+  ]
+}

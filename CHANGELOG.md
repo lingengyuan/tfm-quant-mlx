@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.6 — 2026-11-03
+
+- 新增 `tfmq convert`：导出 packed 量化权重、量化 spec 与模型架构；加载跳过 fp32 权重与重新量化，spec 不匹配时报错。实测 int8 导出 375 MB，预测差为 0。
+- `predict --covariates` 新增 `--target`、`--time`、`--future-covariates`；缺失值改为掩码传入，不再跨列删行。
+- 评估结果保存逐窗口 pinball；报告新增朴素基线与配对 bootstrap 95% CI。
+- 新增 ETTh2 权重与 KV 留出验证。
+- 重跑 full 网格以生成逐窗口数据。
+
 ## 0.1.5 — 2026-11-03
 
 - `tfmq profile` 的 GEMM 行按配置生成实际 shape：batch 8 × 482 token = 3,856 行，同时保留 482 与 15,424 行对照。

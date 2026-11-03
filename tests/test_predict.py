@@ -4,7 +4,12 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from tfmlab.predict import format_forecast, series_from_frame, stacked_series
+from tfmlab.predict import (
+    covariate_arrays,
+    format_forecast,
+    series_from_frame,
+    stacked_series,
+)
 
 
 def test_series_from_frame_takes_tail_and_drops_nan():
@@ -55,6 +60,52 @@ def test_format_forecast_rejects_non_finite_predictions():
     pred[0, 0] = np.nan
     with pytest.raises(ValueError):
         format_forecast("s", pred)
+
+
+def test_covariate_arrays_mask_gaps_instead_of_dropping_rows():
+    frame = pd.DataFrame(
+        {
+            "time": pd.date_range("2026-01-01", periods=10, freq="h"),
+            "a": np.arange(10, dtype=np.float32),
+            "b": np.arange(10, dtype=np.float32),
+            "target": np.arange(10, dtype=np.float32),
+        }
+    )
+    frame.loc[6, "target"] = np.nan
+    name, values, past_only, past_future, masks = covariate_arrays(
+        frame, context=4, horizon=2, target_name="target", time_name="time"
+    )
+    assert name == "target"
+    assert values.shape == (4,)
+    assert past_only.shape == (2, 4)
+    assert past_future.shape == (2, 6)
+    assert masks["target"].tolist() == [True, False, False, False]
+    assert values[0] == 0.0
+    assert not masks["past_future"].any()
+
+
+def test_covariate_arrays_use_explicit_future_columns():
+    frame = pd.DataFrame(
+        {
+            "past": np.arange(10, dtype=np.float32),
+            "future": np.arange(10, dtype=np.float32),
+            "target": np.arange(10, dtype=np.float32),
+        }
+    )
+    frame.loc[8, "future"] = np.nan
+    name, values, past_only, past_future, masks = covariate_arrays(
+        frame,
+        context=4,
+        horizon=2,
+        target_name="target",
+        future_names=("future",),
+    )
+    assert name == "target"
+    assert values.tolist() == [4.0, 5.0, 6.0, 7.0]
+    assert past_only.shape == (1, 4)
+    # One explicit future column plus sin/cos over context + horizon.
+    assert past_future.shape == (3, 6)
+    assert masks["past_future"][0].tolist() == [False, False, False, False, True, False]
 
 
 def test_batched_forecasts_group_by_length(monkeypatch):

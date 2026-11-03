@@ -119,6 +119,65 @@ def test_multivariate_decode_builds_variate_attention_kv():
     assert any(shape[1] == 3 and shape[0] > 1 for shape in shapes)
 
 
+def test_masked_covariate_decode_stays_finite():
+    from tfmlab.runtime import predict_with_covariates
+
+    model = _model()
+    series = _series(1)[0]
+    target = np.nan_to_num(series)
+    target_mask = np.zeros(len(series), dtype=bool)
+    target_mask[10] = True
+    past_only = np.stack([series, series])
+    past_only_mask = np.zeros_like(past_only, dtype=bool)
+    past_only_mask[0, 5] = True
+    index = np.arange(len(series) + 64)
+    past_future = np.stack(
+        [np.sin(index / 12.0), np.cos(index / 12.0)]
+    ).astype(np.float32)
+    pred = predict_with_covariates(
+        model,
+        target[None],
+        past_only[None],
+        past_future[None],
+        64,
+        1,
+        target_mask=target_mask[None],
+        past_only_mask=past_only_mask[None],
+    )
+    assert pred.shape == (1, 64, 9)
+    assert np.isfinite(pred).all()
+
+
+def test_quantized_export_roundtrip(tmp_path):
+    from tfmlab.convert import load_quantized, save_quantized
+    from tfmlab.weights import apply_weight_spec, weight_specs
+
+    model = _model()
+    spec = weight_specs(["int8_g64"])["int8_g64"]
+    apply_weight_spec(model, spec)
+    x = mx.array(_series(1)[None])
+    reference = np.array(model.decode(x, 64))
+    save_quantized(model, spec, str(tmp_path / "q"), "tiny")
+    loaded = load_quantized(str(tmp_path / "q"))
+    out = np.array(loaded.decode(x, 64))
+    np.testing.assert_array_equal(out, reference)
+
+
+def test_converted_model_rejects_a_different_spec(tmp_path):
+    from tfmlab.convert import is_converted, load_quantized, save_quantized
+    from tfmlab.weights import apply_weight_spec, weight_specs
+
+    model = _model()
+    spec = weight_specs(["int8_g64"])["int8_g64"]
+    apply_weight_spec(model, spec)
+    save_quantized(model, spec, str(tmp_path / "q"), "tiny")
+    loaded = load_quantized(str(tmp_path / "q"))
+    assert is_converted(str(tmp_path / "q"))
+    apply_weight_spec(loaded, spec)
+    with pytest.raises(ValueError):
+        apply_weight_spec(loaded, weight_specs(["int4_g64"])["int4_g64"])
+
+
 def test_predict_accepts_three_dimensional_inputs():
     from tfmlab.runtime import predict
 

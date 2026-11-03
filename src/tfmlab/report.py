@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from typing import Any
 
+import numpy as np
+
 
 def _fmt(value: Any, digits: int = 4) -> str:
     if value is None:
@@ -193,6 +195,50 @@ def _throughput_table(runs: list[dict], context: int) -> str:
                 row.append(f"{entry['latency_ms_p50']:.1f} / {entry['series_per_s']:.0f}")
         rows.append(row)
     return _table(header, rows)
+
+
+def _paired_table(
+    runs: list[dict], ref: dict | None, contexts: list[int], draws: int = 2000
+) -> str:
+    """Paired window bootstrap of pinball differences against fp32."""
+    if ref is None:
+        return "_no data_"
+    datasets = list(ref.get("accuracy", {}))
+    rng = np.random.default_rng(0)
+    rows = []
+    for context in contexts:
+        for run in runs:
+            if run.get("name") == ref.get("name"):
+                continue
+            diffs, base = [], []
+            for dataset in datasets:
+                current = _get(run, "accuracy", dataset, str(context), "window_pinball")
+                reference = _get(ref, "accuracy", dataset, str(context), "window_pinball")
+                if not current or not reference or len(current) != len(reference):
+                    continue
+                diffs.extend(np.asarray(current) - np.asarray(reference))
+                base.extend(reference)
+            if not diffs:
+                continue
+            relative = 100.0 * np.asarray(diffs) / max(float(np.mean(base)), 1e-12)
+            draws_mean = relative[
+                rng.integers(0, len(relative), (draws, len(relative)))
+            ].mean(axis=1)
+            low, high = np.percentile(draws_mean, [2.5, 97.5])
+            rows.append(
+                [
+                    run["name"],
+                    str(context),
+                    f"{relative.mean():+.2f}%",
+                    f"[{low:+.2f}%, {high:+.2f}%]",
+                    "是" if low > 0 or high < 0 else "否",
+                ]
+            )
+    if not rows:
+        return "_no data_"
+    return _table(
+        ["配置", "上下文", "Δpinball", "95% CI", "CI 不含 0"], rows
+    )
 
 
 def _baseline_table(fp32: dict | None, baselines: dict, contexts: list[int]) -> str:
@@ -404,6 +450,17 @@ def generate(path: str) -> str:
             f"## KV 每十分位偏移（上下文 {kv_ctx}）",
             "",
             _quantile_table(kv_runs, kv_ctx),
+            "",
+        ]
+    paired_contexts = list(dict.fromkeys([headline, kv_ctx]))
+    paired = _paired_table(weight_runs + kv_runs, fp32_run, paired_contexts)
+    if paired != "_no data_":
+        parts += [
+            "## 配对差异（95% bootstrap CI）",
+            "",
+            "按窗口重采样 2000 次，Δ 相对 fp32；CI 不含 0 表示差异稳定。",
+            "",
+            paired,
             "",
         ]
     findings = _findings(weight_runs, kv_runs, headline, kv_ctx)

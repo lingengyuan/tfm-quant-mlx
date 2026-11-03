@@ -70,3 +70,34 @@ def test_report_includes_naive_baseline(tmp_path):
     text = report.generate(str(path))
     assert "朴素基线" in text
     assert "| ETTh1 | 512 | 0.4000 | 0.5000 | -20.00% | 0.1600 | 0.1800 | -11.11% |" in text
+
+
+def test_report_computes_paired_bootstrap_interval(tmp_path):
+    data = _results()
+    fp32 = data["weight_runs"][0]
+    fp32["accuracy"]["ETTh1"]["512"]["window_pinball"] = [0.16, 0.17, 0.15]
+    quantized = json.loads(json.dumps(fp32))
+    quantized.update(
+        {
+            "name": "int8_g64",
+            "kind": "quant",
+            "weight_bytes": 375e6,
+            "weight_ratio": 3.5,
+            "accuracy": {
+                "ETTh1": {
+                    "512": {
+                        **fp32["accuracy"]["ETTh1"]["512"],
+                        "window_pinball": [0.17, 0.18, 0.16],
+                    }
+                }
+            },
+        }
+    )
+    data["weight_runs"] = [fp32, quantized]
+    data["kv_runs"] = []
+    path = tmp_path / "results.json"
+    path.write_text(json.dumps(data))
+    text = report.generate(str(path))
+    assert "配对差异" in text
+    assert "int8_g64" in text
+    assert "95% CI" in text

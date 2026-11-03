@@ -12,10 +12,10 @@ The Chinese README ([README.md](README.md)) carries the full tables and per-sect
 ## Findings
 
 - `fp16` / `bf16`: 1323 → 661 MB (2.00×), pinball change ≤0.05%. `int8_g64`: 375 MB (3.53×), +0.11%.
-- Plain `int4`: 191–251 MB, pinball +10–12%, quantile crossing 9–19%. Loss concentrates in the last layer (+7.9%) and the output head (+67.8% at 4-bit).
+- Plain `int4`: 191–251 MB, pinball +10–12%, quantile crossing 9–19%. Loss concentrates in the last layer (+7.9%) and the output head (+67.8% at 4-bit). A held-out ETTh2 run keeps the same order: layer 19 +2.33%, residual block +2.60%, 4-bit head +31.75%.
 - 4-bit that works: `mix_l18_19_8` 227 MB (5.82×), +0.80%; clipping 0.95 (`mix_l18_19_8c95`) reaches −0.22% on ETT and +0.61% on Jena, but is worse on traffic (+2.00%).
 - KV: `affine8` 1.78× (−0.01%), `affine4` 3.20× (+0.52%), `turbo3_mse` 3.10× (+2.71%). `qjl1` also reaches 1.78× but compresses only K, so it stays the worst at that ratio (+4.73%).
-- KV error also concentrates in the last block: keeping layer 19 at fp16 moves `affine4` from +0.52% to **−0.36%** (137 MB, 2.88×) and `turbo3_mse` from +2.71% to +0.69% (141 MB, 2.80×). A held-out ETTh2 run does not reproduce this: keeping layer 19 recovers 0.45 pp, while layer 01 recovers the most.
+- KV error also concentrates in the last block: keeping layer 19 at fp16 moves `affine4` from +0.52% to **−0.36%** (137 MB, 2.88×) and `turbo3_mse` from +2.71% to +0.69% (141 MB, 2.80×). A held-out ETTh2 run recovers only 0.45 pp instead of 0.95 pp, and the paired bootstrap intervals at 15,360 include zero (`affine4` [−0.96%, +1.26%], last-block fp16 [−1.70%, +0.39%]).
 - Multivariate: fp32 pinball 0.1152 vs 0.1168 univariate; KV loss grows ~6× because variate attention is sensitive. Sequence `affine4` + variate `affine8` gives +1.15% at 2.29×.
 - Covariates: dropping them costs +4.98% pinball; int4 rises to +17.2%, while the seq/var KV mix stays at −0.91%.
 - Throughput does not improve: at 482 tokens the three precisions differ by ≤8%; end-to-end quantized runs are 0.4–5.6% faster, within the ~10% run-to-run spread. The gain from 4-bit is memory (2774 → 1717 MB).
@@ -97,7 +97,14 @@ done
 .venv/bin/tfmq attention-compare results/attention_manual.json results/attention_sdpa.json
 ```
 
-`predict` decodes each numeric column independently by default and batches equal-length columns (`--batch`, default 8). `--attention sdpa` selects the fused MLX kernel; it is not bit-identical to the manual path, especially with KV compression. `--multi` decodes columns together as variates; `--covariates` uses the last column as the target and the others as past-only covariates.
+`predict` decodes each numeric column independently by default and batches equal-length columns (`--batch`, default 8). `--attention sdpa` selects the fused MLX kernel; it is not bit-identical to the manual path, especially with KV compression. `--multi` decodes columns together as variates; `--covariates` uses the last column as the target and the others as past-only covariates. In covariates mode, `--target` and `--time` name the target and timestamp columns, and `--future-covariates` lists known-future columns whose last `horizon` rows supply future values. Missing values stay in place and are masked, so gaps do not compress the time axis.
+
+Convert a quantized model once and load the packed weights:
+
+```bash
+.venv/bin/tfmq convert --weights int8_g64 --out models/timesfm-int8
+.venv/bin/tfmq predict data.csv --checkpoint models/timesfm-int8 --weights int8_g64
+```
 
 Configuration is YAML under `configs/`. Key fields: `datasets`, `max_channels`, `contexts`, `windows`, `weights`, `kv`, `kv_contexts`, `kv_weights`, `kv_scopes`, `attention`, `multi`, `out`.
 
@@ -107,6 +114,8 @@ Configuration is YAML under `configs/`. Key fields: `datasets`, `max_channels`, 
 - Windows: the last `context` points predict the next `horizon` points. Multivariate mode decodes one table's channels together; covariate mode uses the other channels as past-only and sin/cos calendar features as past-future.
 - `nMAE` and pinball are normalized by each window's context standard deviation; `Δ` is relative to the same-window fp32 output.
 - Naive baseline: repeat the last context value at every step, with all nine quantiles at that value. Reports give fp32 relative to it.
+- Paired differences: reports resample windows 2000 times for a 95% CI of each configuration's pinball difference from fp32.
+- Missing values are passed as masks instead of dropping rows, so gaps do not compress the time axis.
 - Holdout: `--offset N` on `sensitivity` / `kv-sensitivity` reserves the recent N windows for the evaluation grid, so probes use earlier, non-overlapping forecast origins.
 - KV is the per-forward K/V working set: TimesFM 3.0 MLX is a single full-sequence pass with no cross-call cache.
 - Weights use MLX affine quantization through `nn.QuantizedLinear`; clipping 0.95 trims each input group before quantization.
@@ -125,6 +134,7 @@ src/tfmlab/
   covariates.py       covariate experiments
   horizon.py          horizons 64/256/1024
   predict.py          CSV forecasting CLI
+  convert.py          quantized export and direct loading
   attention.py        attention patch and KV installation
   attention_compare.py  manual vs SDPA result comparison
   runtime.py          loading, inference, timing, memory

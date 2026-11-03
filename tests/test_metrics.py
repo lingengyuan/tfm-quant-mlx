@@ -1,6 +1,7 @@
 import numpy as np
+import pytest
 
-from tfmlab.metrics import compare, evaluate
+from tfmlab.metrics import compare, evaluate, window_pinball
 
 
 def test_perfect_forecast_has_zero_error():
@@ -31,3 +32,13 @@ def test_crossing_detection_uses_raw_output():
     scales = np.ones(1, dtype=np.float32)
     m = evaluate(pred, target, scales)
     assert m.crossing_rate > 0
+
+
+def test_window_pinball_averages_to_the_global_metric():
+    rng = np.random.default_rng(0)
+    target = rng.normal(size=(3, 4)).astype(np.float32)
+    pred = rng.normal(size=(3, 4, 9)).astype(np.float32)
+    scales = np.array([1.0, 2.0, 0.5], dtype=np.float32)
+    windows = window_pinball(pred, target, scales)
+    assert windows.shape == (3,)
+    assert windows.mean() == pytest.approx(evaluate(pred, target, scales).pinball)

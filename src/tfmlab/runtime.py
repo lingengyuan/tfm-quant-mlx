@@ -21,6 +21,10 @@ def load_model(checkpoint: str):
     from timesfm3.mlx import TimesFM3Forecaster
 
     patch_class()
+    from .convert import is_converted, load_quantized
+
+    if is_converted(checkpoint):
+        return load_quantized(checkpoint)
     forecaster = TimesFM3Forecaster.from_pretrained(checkpoint)
     return forecaster.model
 
@@ -54,24 +58,42 @@ def predict(model, contexts: np.ndarray, horizon: int, batch_size: int) -> np.nd
 def predict_with_covariates(
     model,
     contexts: np.ndarray,
-    past_only: np.ndarray,
-    past_future: np.ndarray,
+    past_only: np.ndarray | None,
+    past_future: np.ndarray | None,
     horizon: int,
     batch_size: int,
+    target_mask: np.ndarray | None = None,
+    past_only_mask: np.ndarray | None = None,
+    past_future_mask: np.ndarray | None = None,
 ) -> np.ndarray:
     """Decode one target variate with past-only and past-future covariates.
 
+    Masks follow the model convention: ``True`` marks a missing value.
     Returns ``(N, horizon, 9)`` for the target only.
     """
     outputs = []
     for start in range(0, len(contexts), batch_size):
         stop = start + batch_size
         target = mx.array(np.asarray(contexts[start:stop], dtype=np.float32))[:, None, :]
+
+        def _array(values, mask):
+            if values is None:
+                return None, None
+            chunk = mx.array(np.asarray(values[start:stop], dtype=np.float32))
+            return chunk, (mx.array(mask[start:stop]) if mask is not None else None)
+
+        past_only_chunk, past_only_mask_chunk = _array(past_only, past_only_mask)
+        past_future_chunk, past_future_mask_chunk = _array(past_future, past_future_mask)
         out = model.decode(
             target,
             horizon,
-            past_only_covariates=mx.array(np.asarray(past_only[start:stop], dtype=np.float32)),
-            past_future_covariates=mx.array(np.asarray(past_future[start:stop], dtype=np.float32)),
+            past_only_covariates=past_only_chunk,
+            past_future_covariates=past_future_chunk,
+            target_mask=(
+                mx.array(target_mask[start:stop]) if target_mask is not None else None
+            ),
+            past_only_mask=past_only_mask_chunk,
+            past_future_mask=past_future_mask_chunk,
         )
         mx.eval(out)
         outputs.append(np.array(out)[:, 0])

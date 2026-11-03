@@ -53,6 +53,21 @@ def _cmd_attention_compare(args) -> int:
     return 0
 
 
+def _cmd_convert(args) -> int:
+    from .convert import ConvertConfig, run as run_convert
+
+    run_convert(
+        ConvertConfig(
+            checkpoint=args.checkpoint,
+            weights=args.weights,
+            out=args.out,
+            context=args.context,
+            verify=args.verify,
+        )
+    )
+    return 0
+
+
 def _cmd_sanity(args) -> int:
     import mlx.core as mx
     import numpy as np
@@ -183,6 +198,9 @@ def _cmd_predict(args) -> int:
             multi=args.multi,
             covariates=args.covariates,
             period=args.period,
+            target=args.target,
+            future_covariates=tuple(filter(None, args.future_covariates.split(","))),
+            time=args.time,
         )
     )
     return 0
@@ -235,6 +253,14 @@ def main(argv: list[str] | None = None) -> int:
     sens_p.add_argument("--out", default="results/sensitivity.json")
     sens_p.add_argument("--md", default="results/sensitivity.md")
     sens_p.set_defaults(func=_cmd_sensitivity)
+
+    conv_p = sub.add_parser("convert", help="export a quantized model and load it directly")
+    conv_p.add_argument("--checkpoint", default="models/timesfm-3.0")
+    conv_p.add_argument("--weights", default="int8_g64")
+    conv_p.add_argument("--out", default="models/timesfm-int8")
+    conv_p.add_argument("--context", type=int, default=512, help="verification context")
+    conv_p.add_argument("--no-verify", dest="verify", action="store_false")
+    conv_p.set_defaults(func=_cmd_convert)
 
     san_p = sub.add_parser("sanity", help="check patch parity and KV roundtrip error")
     san_p.add_argument("--checkpoint", default="models/timesfm-3.0")
@@ -292,6 +318,9 @@ def main(argv: list[str] | None = None) -> int:
     pred_p.add_argument("--batch", type=int, default=8, help="series decoded per call")
     pred_p.add_argument("--multi", action="store_true", help="decode columns as variates")
     pred_p.add_argument("--covariates", action="store_true", help="last column is the target")
+    pred_p.add_argument("--target", default=None, help="target column in covariates mode")
+    pred_p.add_argument("--future-covariates", default="", help="comma separated known-future columns")
+    pred_p.add_argument("--time", default=None, help="timestamp column")
     pred_p.add_argument("--period", type=float, default=24.0, help="calendar period for covariates")
     pred_p.set_defaults(func=_cmd_predict)
 
