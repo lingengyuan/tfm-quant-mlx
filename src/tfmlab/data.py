@@ -199,11 +199,13 @@ def build_windows(
     context: int,
     horizon: int,
     num_windows: int,
+    offset: int = 0,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, list[int]] | None:
     """Return (contexts, targets, scales, channel_ids) for one dataset.
 
     ``scales`` is each window's context standard deviation, floored at 1e-6, and
     is used to express forecast deviations in native amplitude units.
+    ``offset`` reserves that many recent windows for a separate evaluation set.
     """
     min_len = context + horizon
     usable = [i for i, s in enumerate(series_set.series) if len(s) >= min_len]
@@ -214,7 +216,9 @@ def build_windows(
     if length < min_len:
         return None
     first_end = context
-    last_end = length - horizon
+    last_end = length - horizon - offset * horizon
+    if last_end < first_end:
+        return None
     count = max(1, min(num_windows, (last_end - first_end) // max(1, horizon) + 1))
     ends = np.linspace(first_end, last_end, count).astype(int)
 
@@ -389,14 +393,19 @@ def eval_windows(
     context: int,
     horizon: int,
     windows: int,
+    offset: int = 0,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Stack windows from the named ETT tables plus the synthetic suite."""
+    """Stack windows from the named ETT tables plus the synthetic suite.
+
+    ``offset`` shifts windows earlier so a probe can use forecast origins that
+    the evaluation grid does not cover.
+    """
     sets = [load_ett(name, data_dir) for name in datasets]
     if synthetic:
         sets.append(synthetic_set())
     frames = []
     for series_set in sets:
-        built = build_windows(series_set, context, horizon, windows)
+        built = build_windows(series_set, context, horizon, windows, offset)
         if built is not None:
             frames.append(built)
     if not frames:

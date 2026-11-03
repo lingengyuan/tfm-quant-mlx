@@ -34,6 +34,9 @@ class KVSensitivityConfig:
     context: int = 15360
     horizon: int = 64
     windows: int = 4
+    # Reserve this many recent windows for the evaluation grid, so the probe
+    # and the final comparison use disjoint forecast origins.
+    offset: int = 0
     batch: int = 32
     kv: str = "affine4"
     out: str = "results/kv_sensitivity.json"
@@ -52,7 +55,13 @@ def _score(pred, targets, scales, baseline) -> dict:
 
 def run(cfg: KVSensitivityConfig) -> dict:
     contexts, targets, scales = eval_windows(
-        cfg.data_dir, cfg.datasets, cfg.synthetic, cfg.context, cfg.horizon, cfg.windows
+        cfg.data_dir,
+        cfg.datasets,
+        cfg.synthetic,
+        cfg.context,
+        cfg.horizon,
+        cfg.windows,
+        cfg.offset,
     )
 
     model = load_model(cfg.checkpoint)
@@ -139,6 +148,8 @@ def render(path: str) -> str:
         "| 层 | Δpinball | ΔnMAE |",
         "|---|---|---|",
     ]
+    if cfg.get("offset"):
+        lines.insert(2, f"- 窗口偏移：{cfg['offset']}（为评测预留最近 {cfg['offset']} 个窗口）")
     for row in layers:
         lines.append(
             f"| {row['layers'][0]:02d} | {row['pinball_delta_pct']:+.3f}% | "

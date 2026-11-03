@@ -57,6 +57,26 @@ def test_format_forecast_rejects_non_finite_predictions():
         format_forecast("s", pred)
 
 
+def test_batched_forecasts_group_by_length(monkeypatch):
+    import tfmlab.predict as predict_mod
+
+    calls = []
+
+    def fake(model, contexts, horizon, batch):
+        calls.append((contexts.shape, batch))
+        return np.zeros((len(contexts), horizon, 9), dtype=np.float32)
+
+    monkeypatch.setattr(predict_mod, "predict", fake)
+    series = {
+        "a": np.arange(4, dtype=np.float32),
+        "b": np.arange(5, dtype=np.float32),
+        "c": np.arange(4, dtype=np.float32),
+    }
+    frames = predict_mod._batched_forecasts(None, series, 2, 8)
+    assert [frame["series"].iloc[0] for frame in frames] == ["a", "b", "c"]
+    assert calls == [((2, 4), 8), ((1, 5), 8)]
+
+
 def test_format_forecast_sorts_quantiles():
     rng = np.random.default_rng(0)
     pred = rng.normal(size=(4, 9)).astype(np.float32)

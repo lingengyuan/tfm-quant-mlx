@@ -18,7 +18,7 @@ import mlx.core as mx
 import timesfm3.mlx.transformer as tfm_transformer
 from timesfm3.mlx.transformer import rope
 
-from .kv import KVCompressor, make_scope_plans
+from .kv import KVCompressor, PassThroughKV, make_scope_plans
 
 _KV_ATTR = "_tfmlab_kv"
 _ORIGINAL = tfm_transformer.MultiHeadAttention.__call__
@@ -123,6 +123,31 @@ def install_kv_named(model, name: str) -> list[KVCompressor]:
             )
             install_kv_scopes(model, [index], assignments)
     return [compressor for _, plan in plans for compressor in plan]
+
+
+def set_attention_backend(model, backend: str) -> None:
+    """Select the attention path after any compressors are installed.
+
+    ``sdpa`` uses ``mx.fast.scaled_dot_product_attention``; ``manual`` keeps the
+    explicit matmul-softmax-matmul path. Without a compressor the patch would
+    delegate to the original method, so ``sdpa`` installs a pass-through
+    compressor to reach the fused kernel.
+    """
+    if backend not in ("manual", "sdpa"):
+        raise ValueError(f"unknown attention backend: {backend}")
+    for layer in model.transformer_stack.layers:
+        for attr in ("seq_attn", "var_attn"):
+            module = getattr(layer, attr, None)
+            if module is None:
+                continue
+            kv = getattr(module, _KV_ATTR, None)
+            if kv is None:
+                if backend == "manual":
+                    continue
+                kv = PassThroughKV()
+                setattr(module, _KV_ATTR, kv)
+            kv.fast = backend == "sdpa"
+    model._compiled_forward = None
 
 
 def patch_class() -> None:

@@ -74,3 +74,17 @@ def test_horizon_windows_share_contexts():
     assert targets[64].shape == (contexts.shape[0], 64)
     assert targets[256].shape == (contexts.shape[0], 256)
     assert len(scales) == contexts.shape[0]
+
+
+def test_window_offset_moves_origins_earlier():
+    series_set = synthetic_set(length=1000)
+    base = build_windows(series_set, 256, 64, 2)
+    shifted = build_windows(series_set, 256, 64, 2, offset=2)
+    assert shifted is not None
+    assert base[0].shape == shifted[0].shape
+    assert not np.array_equal(base[0], shifted[0])
+    channel = shifted[3][-1]
+    source = series_set.series[channel]
+    end = len(source) - 64 - 2 * 64
+    np.testing.assert_allclose(shifted[0][-1], source[end - 256 : end])
+    np.testing.assert_allclose(shifted[1][-1], source[end : end + 64])

@@ -20,6 +20,7 @@ The Chinese README ([README.md](README.md)) carries the full tables and per-sect
 - Covariates: dropping them costs +4.98% pinball; int4 rises to +17.2%, while the seq/var KV mix stays at −0.91%.
 - Throughput does not improve: at 482 tokens the three precisions differ by ≤3%; end-to-end differences stay ≤7%. The gain from 4-bit is memory (2774 → 1717 MB).
 - Cross-backend baseline: MLX fp32 vs PyTorch on 56 series, mean normalized deviation 0.0013 (max 0.0081), pinball difference −0.001%.
+- Naive baseline: on exchange at context 2,048, fp32 point nMAE (0.3126) is 15.0% worse than repeating the last value (0.2718), while its pinball is 18.0% better. Point forecasts lose there; quantile forecasts still win.
 
 ## Results
 
@@ -90,15 +91,17 @@ done
   --weights int8_g64 --kv affine4 -o forecasts.csv
 ```
 
-`predict` decodes each numeric column independently by default. `--multi` decodes columns together as variates; `--covariates` uses the last column as the target and the others as past-only covariates.
+`predict` decodes each numeric column independently by default and batches equal-length columns (`--batch`, default 8). `--attention sdpa` selects the fused MLX kernel; it is not bit-identical to the manual path, especially with KV compression. `--multi` decodes columns together as variates; `--covariates` uses the last column as the target and the others as past-only covariates.
 
-Configuration is YAML under `configs/`. Key fields: `datasets`, `max_channels`, `contexts`, `windows`, `weights`, `kv`, `kv_contexts`, `kv_weights`, `kv_scopes`, `multi`, `out`.
+Configuration is YAML under `configs/`. Key fields: `datasets`, `max_channels`, `contexts`, `windows`, `weights`, `kv`, `kv_contexts`, `kv_weights`, `kv_scopes`, `attention`, `multi`, `out`.
 
 ## Method
 
 - Data: ETT-small, Jena Climate (10 min), UCI Electricity (15 min), traffic (hourly), exchange (daily), and a deterministic synthetic suite.
 - Windows: the last `context` points predict the next `horizon` points. Multivariate mode decodes one table's channels together; covariate mode uses the other channels as past-only and sin/cos calendar features as past-future.
 - `nMAE` and pinball are normalized by each window's context standard deviation; `Δ` is relative to the same-window fp32 output.
+- Naive baseline: repeat the last context value at every step, with all nine quantiles at that value. Reports give fp32 relative to it.
+- Holdout: `--offset N` on `sensitivity` / `kv-sensitivity` reserves the recent N windows for the evaluation grid, so probes use earlier, non-overlapping forecast origins.
 - KV is the per-forward K/V working set: TimesFM 3.0 MLX is a single full-sequence pass with no cross-call cache.
 - Weights use MLX affine quantization through `nn.QuantizedLinear`; clipping 0.95 trims each input group before quantization.
 

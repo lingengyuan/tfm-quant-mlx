@@ -44,6 +44,15 @@ def _results() -> dict:
         "datasets": {"ETTh1": {"channels": 7, "length": 1000, "freq": "1h", "windows": {"512": 1}}},
         "weight_runs": [fp32, {"name": "int4_g64", "error": "boom"}],
         "kv_runs": [{"name": "affine4", "error": "boom"}],
+        "baselines": {
+            "ETTh1": {
+                "512": {
+                    "nmae": 0.5,
+                    "pinball": 0.18,
+                    "crossing_rate": 0.0,
+                }
+            }
+        },
     }
 
 
@@ -53,3 +62,11 @@ def test_report_survives_failed_runs(tmp_path):
     text = report.generate(str(path))
     assert "失败运行" in text
     assert "int4_g64: boom" in text
+
+
+def test_report_includes_naive_baseline(tmp_path):
+    path = tmp_path / "results.json"
+    path.write_text(json.dumps(_results()))
+    text = report.generate(str(path))
+    assert "朴素基线" in text
+    assert "| ETTh1 | 512 | 0.4000 | 0.5000 | -20.00% | 0.1600 | 0.1800 | -11.11% |" in text

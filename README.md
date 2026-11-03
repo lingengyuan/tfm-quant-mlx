@@ -246,6 +246,8 @@ ETTh1 加 Jena Climate（10 分钟）与 UCI Electricity（15 分钟），每表
 - int4 对域敏感：Jena +47.9%，是 ETTh1 的 4 倍；`mix_l18_19_8` 把 Jena 压到 +3.6%。
 - KV `affine4` 在 Jena 上 +4.8%；第 19 层 fp16 把聚合损失从 +2.21% 降到 +0.90%。
 
+朴素基线（重复最后一个上下文值）在 exchange 上优于 fp32 点预测：ctx 2048 的 nMAE 为 0.2718 vs 0.3126（fp32 差 +15.0%）；pinball 则相反，0.1359 vs 0.1115（fp32 好 18.0%）。该数据集上模型的点预测不如朴素基线，分位预测仍更好。
+
 traffic（小时）与 exchange（日频，7,588 行，不支持 15,360）：
 
 | 配置 | traffic 2,048 | exchange 2,048 | traffic 15,360 |
@@ -321,6 +323,8 @@ uv pip install -e .
 
 每个数值列默认作为独立单变量序列，取最后 `context` 个有效值。输出列为 `series, step, point, q0.1 … q0.9`，分位按行排序。`--weights` 与 `--kv` 省略时用 fp32 和未压缩。
 
+- `--batch`：每次 decode 的序列数，默认 8。等长序列合批，输出顺序与列顺序一致。
+- `--attention sdpa`：走 MLX 融合注意力；与手写路径不保证逐位一致，KV 压缩下差异更大。
 - `--multi`：所有数值列作为 variate 一起 decode。
 - `--covariates`：最后一列为目标，其余列为 past-only，sin/cos 日历特征为 past-future；`--period` 默认 24。
 
@@ -337,6 +341,7 @@ uv pip install -e .
 | `kv` / `kv_contexts` | KV 模式；测 KV 的上下文 |
 | `kv_weights` | 与 KV 网格配对的权重配置 |
 | `kv_scopes` | `seq` / `var` / `both` |
+| `attention` | `manual`（默认）或 `sdpa` 融合注意力 |
 | `multi` | 同一窗口的通道一起 decode |
 | `out` | 结果 JSON 路径 |
 
@@ -351,6 +356,7 @@ done
 .venv/bin/tfmq kv-sensitivity --kv affine4
 .venv/bin/tfmq kv-sensitivity --kv turbo3_mse \
   --out results/kv_sensitivity_turbo3.json --md results/kv_sensitivity_turbo3.md
+.venv/bin/tfmq kv-sensitivity --kv affine4 --offset 6  # 留出最近 6 个窗口
 .venv/bin/tfmq profile
 .venv/bin/tfmq parity  # 需要 torch：uv pip install -e ".[parity]"
 .venv/bin/tfmq covariates
@@ -374,6 +380,8 @@ done
 - 窗口：每条序列用最后 `context` 个点预测未来 64 点；多变量模式下同一时刻的 7 个通道一起 decode。
 - 协变量：最后一个通道为目标，其余通道为 past-only，sin/cos 日历特征为 past-future。
 - `nMAE`、`pinball` 按每条窗口上下文标准差归一化；`Δ` 为相对同窗口 fp32 的变化。
+- `朴素基线`：每个窗口重复最后一个上下文值，九个分位取同一值；报告给出 fp32 相对该基线的差。
+- `留出`：`sensitivity` / `kv-sensitivity` 的 `--offset N` 把最近 N 个窗口留给评测网格，探针使用更早的预测起点，两组不重叠。
 - `cov err` 为 9 个十分位覆盖率与名义值之差的平均；`cross %` 为排序前的相邻十分位逆序比例。
 - `KV MB` 按张量形状和比特数计算，`reduction` 相对 fp16 K/V；`peak MB` 为 MLX 峰值显存，含常驻权重。
 

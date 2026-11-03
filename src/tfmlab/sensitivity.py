@@ -35,6 +35,8 @@ class SensitivityConfig:
     context: int = 2048
     horizon: int = 64
     windows: int = 2
+    # Reserve this many recent windows for the evaluation grid.
+    offset: int = 0
     batch: int = 32
     bits: int = 4
     group_size: int = 64
@@ -55,7 +57,13 @@ def _quantize_matching(model, match, bits: int, group_size: int) -> None:
 
 def _load_eval(cfg: SensitivityConfig) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     return eval_windows(
-        cfg.data_dir, cfg.datasets, cfg.synthetic, cfg.context, cfg.horizon, cfg.windows
+        cfg.data_dir,
+        cfg.datasets,
+        cfg.synthetic,
+        cfg.context,
+        cfg.horizon,
+        cfg.windows,
+        cfg.offset,
     )
 
 
@@ -142,6 +150,12 @@ def render(path: str) -> str:
         "| 组件 | bits | 权重 MB | Δpinball | 交叉率 |",
         "|---|---|---|---|---|",
     ]
+    if data["config"].get("offset"):
+        lines.insert(
+            2,
+            f"- 窗口偏移：{data['config']['offset']}"
+            f"（为评测预留最近 {data['config']['offset']} 个窗口）",
+        )
     for row in data["tests"]:
         lines.append(
             f"| {row['name']} | {row['bits']} | {row['weight_bytes'] / 1e6:.0f} | "

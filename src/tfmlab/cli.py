@@ -25,7 +25,7 @@ def _load_config(args) -> RunConfig:
         cfg = RunConfig.from_dict(data)
     else:
         cfg = config_from_preset(args.preset or "quick")
-    for key in ("checkpoint", "out", "windows", "repeats", "eval_batch"):
+    for key in ("checkpoint", "out", "windows", "repeats", "eval_batch", "attention"):
         value = getattr(args, key, None)
         if value is not None:
             setattr(cfg, key, value)
@@ -75,6 +75,7 @@ def _cmd_sensitivity(args) -> int:
     cfg = SensitivityConfig(
         checkpoint=args.checkpoint,
         context=args.context,
+        offset=args.offset,
         out=args.out,
     )
     run_sensitivity(cfg)
@@ -93,6 +94,7 @@ def _cmd_kv_sensitivity(args) -> int:
         context=args.context,
         kv=args.kv,
         windows=args.windows,
+        offset=args.offset,
         out=args.out,
     )
     run_kv_sensitivity(cfg)
@@ -164,6 +166,8 @@ def _cmd_predict(args) -> int:
             horizon=args.horizon,
             weights=args.weights,
             kv=args.kv,
+            attention=args.attention,
+            batch=args.batch,
             multi=args.multi,
             covariates=args.covariates,
             period=args.period,
@@ -202,6 +206,7 @@ def main(argv: list[str] | None = None) -> int:
     run_p.add_argument("--windows", type=int, default=None)
     run_p.add_argument("--repeats", type=int, default=None)
     run_p.add_argument("--eval-batch", type=int, dest="eval_batch", default=None)
+    run_p.add_argument("--attention", choices=("manual", "sdpa"), default=None)
     run_p.set_defaults(func=_cmd_run)
 
     rep_p = sub.add_parser("report", help="render a Markdown report")
@@ -212,6 +217,7 @@ def main(argv: list[str] | None = None) -> int:
     sens_p = sub.add_parser("sensitivity", help="layer-wise 4-bit sensitivity probe")
     sens_p.add_argument("--checkpoint", default="models/timesfm-3.0")
     sens_p.add_argument("--context", type=int, default=2048)
+    sens_p.add_argument("--offset", type=int, default=0, help="recent windows reserved for evaluation")
     sens_p.add_argument("--out", default="results/sensitivity.json")
     sens_p.add_argument("--md", default="results/sensitivity.md")
     sens_p.set_defaults(func=_cmd_sensitivity)
@@ -225,6 +231,7 @@ def main(argv: list[str] | None = None) -> int:
     kvs_p.add_argument("--context", type=int, default=15360)
     kvs_p.add_argument("--kv", default="affine4")
     kvs_p.add_argument("--windows", type=int, default=4)
+    kvs_p.add_argument("--offset", type=int, default=0, help="recent windows reserved for evaluation")
     kvs_p.add_argument("--out", default="results/kv_sensitivity.json")
     kvs_p.add_argument("--md", default="results/kv_sensitivity.md")
     kvs_p.set_defaults(func=_cmd_kv_sensitivity)
@@ -265,6 +272,8 @@ def main(argv: list[str] | None = None) -> int:
     pred_p.add_argument("--horizon", type=int, default=64)
     pred_p.add_argument("--weights", default="fp32")
     pred_p.add_argument("--kv", default="none")
+    pred_p.add_argument("--attention", choices=("manual", "sdpa"), default="manual")
+    pred_p.add_argument("--batch", type=int, default=8, help="series decoded per call")
     pred_p.add_argument("--multi", action="store_true", help="decode columns as variates")
     pred_p.add_argument("--covariates", action="store_true", help="last column is the target")
     pred_p.add_argument("--period", type=float, default=24.0, help="calendar period for covariates")

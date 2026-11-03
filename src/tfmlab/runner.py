@@ -15,7 +15,7 @@ import numpy as np
 from mlx.utils import tree_flatten
 
 from . import metrics
-from .attention import install_kv_scopes
+from .attention import install_kv_scopes, set_attention_backend
 from .data import SeriesSet, build_multi_windows, build_windows, load_dataset, synthetic_set
 from .kv import KV_NAMES, make_scope_plans
 from .runtime import (
@@ -107,6 +107,9 @@ class RunConfig:
     # to attribute the error between the two.
     kv_scopes: tuple[str, ...] = ("both",)
     kv_contexts: tuple[int, ...] = (2048, 8192, 15360)
+    # "manual" keeps the explicit matmul-softmax path; "sdpa" uses the fused
+    # kernel. Not numerically identical with KV compression, so keep it opt-in.
+    attention: str = "manual"
     throughput_contexts: tuple[int, ...] = (512, 2048, 15360)
     throughput_batches: tuple[int, ...] = (1, 8, 32)
     repeats: int = 3
@@ -271,6 +274,7 @@ def _weight_run(
 ) -> dict:
     model = load_model(cfg.checkpoint)
     apply_weight_spec(model, spec)
+    set_attention_backend(model, cfg.attention)
     nbytes = weight_nbytes(model)
     print(f"[weights] {spec.name}: {nbytes / 1e6:.0f} MB", flush=True)
     acc, macro, _ = _accuracy(model, cfg, eval_data, contexts, ref)
@@ -312,6 +316,7 @@ def _kv_run(
                 else {plan_scope: compressor}
             )
             install_kv_scopes(model, [index], assignments)
+    set_attention_backend(model, cfg.attention)
 
     # The first forward at the probe shape traces the compiled graph and records
     # every K/V tensor shape. Later calls at the same shape reuse the graph.
@@ -378,6 +383,8 @@ def _kv_run(
 
 def run(cfg: RunConfig) -> dict:
     started = time.time()
+    if cfg.attention not in ("manual", "sdpa"):
+        raise ValueError(f"unknown attention backend: {cfg.attention}")
     needed = tuple(sorted(set(cfg.contexts) | set(cfg.kv_contexts) | set(cfg.throughput_contexts)))
     sets, eval_data = _load_data(cfg, needed)
     variates = 1
@@ -391,6 +398,11 @@ def run(cfg: RunConfig) -> dict:
     # fp32 runs first regardless of position, so every later run has a reference.
     weight_names = _weight_order(cfg.weights)
     specs = weight_specs(weight_names)
+    baselines: dict[str, dict[str, dict]] = {}
+    for (name, context), data in eval_data.items():
+        baselines.setdefault(name, {})[str(context)] = metrics.baseline(
+            data.contexts, data.targets, data.scales
+        ).to_dict()
 
     results: dict[str, Any] = {
         "meta": {
@@ -417,6 +429,7 @@ def run(cfg: RunConfig) -> dict:
             }
             for name, series_set in sets.items()
         },
+        "baselines": baselines,
         "weight_runs": [],
         "kv_runs": [],
     }
@@ -430,6 +443,7 @@ def run(cfg: RunConfig) -> dict:
             # Set env from the first loaded model, and cache reference outputs.
             model = load_model(cfg.checkpoint)
             apply_weight_spec(model, spec)
+            set_attention_backend(model, cfg.attention)
             results["env"] = env_info(cfg.checkpoint, model)
             results["env"]["param_count"] = int(
                 sum(p.size for _, p in tree_flatten(model.parameters()))

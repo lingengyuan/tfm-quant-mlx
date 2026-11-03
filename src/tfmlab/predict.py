@@ -17,7 +17,7 @@ import dataclasses
 import numpy as np
 import pandas as pd
 
-from .attention import install_kv_named
+from .attention import install_kv_named, set_attention_backend
 from .runtime import load_model, predict, predict_with_covariates, unload_model
 from .weights import apply_weight_spec, weight_specs
 
@@ -33,6 +33,8 @@ class PredictConfig:
     horizon: int = 64
     weights: str = "fp32"
     kv: str = "none"
+    attention: str = "manual"
+    batch: int = 8
     multi: bool = False
     covariates: bool = False
     period: float = 24.0
@@ -93,14 +95,47 @@ def format_forecast(name: str, pred: np.ndarray) -> pd.DataFrame:
     return frame
 
 
+def _batched_forecasts(
+    model, series: dict[str, np.ndarray], horizon: int, batch: int
+) -> list[pd.DataFrame]:
+    """Group equal-length columns so one decode covers several series.
+
+    ``predict`` needs a rectangular batch, so lengths are grouped; the output
+    order still follows the input column order.
+    """
+    groups: dict[int, list[str]] = {}
+    for name, values in series.items():
+        groups.setdefault(len(values), []).append(name)
+    forecasts: dict[str, np.ndarray] = {}
+    for names in groups.values():
+        pred = predict(model, np.stack([series[name] for name in names]), horizon, batch)
+        forecasts.update({name: pred[index] for index, name in enumerate(names)})
+    return [format_forecast(name, forecasts[name]) for name in series]
+
+
+def _validate(cfg: PredictConfig) -> None:
+    if cfg.context < 1:
+        raise ValueError("context must be positive")
+    if cfg.horizon < 1:
+        raise ValueError("horizon must be positive")
+    if cfg.batch < 1:
+        raise ValueError("batch must be positive")
+    if cfg.covariates and cfg.period <= 0:
+        raise ValueError("period must be positive in covariates mode")
+    if cfg.attention not in ("manual", "sdpa"):
+        raise ValueError(f"unknown attention backend: {cfg.attention}")
+
+
 def run(cfg: PredictConfig) -> pd.DataFrame:
     if cfg.multi and cfg.covariates:
         raise ValueError("choose one of multi or covariates")
+    _validate(cfg)
     frame = pd.read_csv(cfg.input)
     model = load_model(cfg.checkpoint)
     apply_weight_spec(model, weight_specs([cfg.weights])[cfg.weights])
     if cfg.kv not in ("none", "off", ""):
         install_kv_named(model, cfg.kv)
+    set_attention_backend(model, cfg.attention)
 
     if cfg.multi:
         names, contexts, _ = stacked_series(frame, cfg.context)
@@ -127,10 +162,7 @@ def run(cfg: PredictConfig) -> pd.DataFrame:
         series = {names[-1]: None}
     else:
         series = series_from_frame(frame, cfg.context)
-        outputs = [
-            format_forecast(name, predict(model, values[None], cfg.horizon, 1)[0])
-            for name, values in series.items()
-        ]
+        outputs = _batched_forecasts(model, series, cfg.horizon, cfg.batch)
     unload_model(model)
 
     result = pd.concat(outputs, ignore_index=True)

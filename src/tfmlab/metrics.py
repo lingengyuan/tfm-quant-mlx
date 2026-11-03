@@ -60,6 +60,20 @@ def evaluate(pred: np.ndarray, target: np.ndarray, scales: np.ndarray) -> Metric
     )
 
 
+def baseline(contexts: np.ndarray, target: np.ndarray, scales: np.ndarray) -> Metrics:
+    """Forecast that repeats the last context value for every step.
+
+    The nine quantiles collapse to that point, so the pinball loss is the
+    constant-forecast loss. Accepts ``(N, L)`` or ``(W, V, L)`` contexts.
+    """
+    point = np.asarray(contexts, dtype=np.float32)[..., -1].reshape(-1)
+    flat_target = target.reshape(-1, target.shape[-1])
+    flat_scales = np.asarray(scales, dtype=np.float32).reshape(-1)
+    pred = np.repeat(point[:, None, None], flat_target.shape[1], axis=1)
+    pred = np.repeat(pred, len(TAUS), axis=2)
+    return evaluate(pred, flat_target, flat_scales)
+
+
 def deviations(pred: np.ndarray, ref: np.ndarray, scales: np.ndarray) -> dict:
     """Forecast shift from the fp32 reference, normalized by each series' context scale."""
     scale = scales[:, None, None]

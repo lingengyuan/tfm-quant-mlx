@@ -195,6 +195,47 @@ def _throughput_table(runs: list[dict], context: int) -> str:
     return _table(header, rows)
 
 
+def _baseline_table(fp32: dict | None, baselines: dict, contexts: list[int]) -> str:
+    rows = []
+    for name, by_context in baselines.items():
+        for context in contexts:
+            base = by_context.get(str(context))
+            ref = _get(fp32 or {}, "accuracy", name, str(context))
+            if not base or not ref:
+                continue
+            rows.append(
+                [
+                    name,
+                    str(context),
+                    _fmt(ref.get("nmae")),
+                    _fmt(base.get("nmae")),
+                    _pct(100.0 * (ref["nmae"] - base["nmae"]) / max(base["nmae"], 1e-12)),
+                    _fmt(ref.get("pinball")),
+                    _fmt(base.get("pinball")),
+                    _pct(
+                        100.0
+                        * (ref["pinball"] - base["pinball"])
+                        / max(base["pinball"], 1e-12)
+                    ),
+                ]
+            )
+    if not rows:
+        return "_no data_"
+    return _table(
+        [
+            "dataset",
+            "ctx",
+            "fp32 nMAE",
+            "朴素 nMAE",
+            "ΔnMAE",
+            "fp32 pinball",
+            "朴素 pinball",
+            "Δpinball",
+        ],
+        rows,
+    )
+
+
 def _findings(weight_runs: list[dict], kv_runs: list[dict], weight_ctx: int, kv_ctx: int) -> list[str]:
     lines = []
     fp32 = next((r for r in weight_runs if r["name"] == "fp32"), None)
@@ -335,6 +376,17 @@ def generate(path: str) -> str:
             f"## 权重每十分位偏移（上下文 {long_ctx}）",
             "",
             weight_quantiles,
+            "",
+        ]
+    baselines = data.get("baselines", {})
+    fp32_run = next((r for r in weight_runs if r.get("name") == "fp32"), None)
+    if baselines:
+        parts += [
+            "## 朴素基线（重复最后值）",
+            "",
+            "Δ 为模型相对朴素基线的变化，正值表示模型更差；朴素基线使用同一批窗口的最后一个上下文值。",
+            "",
+            _baseline_table(fp32_run, baselines, contexts),
             "",
         ]
     if kv_runs:
