@@ -101,3 +101,29 @@ def test_scope_plan_splits_attention_modes():
 
     single = make_scope_plans("affine4", 20, "seq")
     assert [scope for scope, _ in single] == ["seq"]
+
+
+def test_turbo_bits_count_the_padded_encoding():
+    kv = make_kv("turbo3_mse")
+    x = mx.array(np.zeros((1, 4, 2, 80), dtype=np.float32))
+    kv.apply(x, "k")
+    assert kv.bits_k == pytest.approx((127 * 3 + 32) / 80)
+    assert kv.logical_bytes() == (1 * 4 * 2) * (127 * 3 + 32) / 8
+
+
+def test_qjl_inner_products_are_unbiased():
+    rng = np.random.default_rng(3)
+    x = rng.normal(size=(512, 80)).astype(np.float32)
+    estimate = np.array(make_kv("qjl1")._roundtrip(mx.array(x)))
+    queries = rng.normal(size=(200, 80)).astype(np.float32)
+    true = (queries @ x.T).ravel()
+    approx = (queries @ estimate.T).ravel()
+    slope = float(np.cov(true, approx)[0, 1] / np.var(true))
+    assert 0.9 < slope < 1.1, f"slope {slope:.3f}"
+
+
+def test_turbo_prod_maps_zero_to_zero():
+    out = np.array(
+        make_kv("turbo3_prod")._roundtrip(mx.array(np.zeros((2, 80), dtype=np.float32)))
+    )
+    assert np.abs(out).max() < 1e-6

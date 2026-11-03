@@ -131,6 +131,10 @@ class RunConfig:
         return cls(**clean)
 
 
+def _weight_order(names) -> list[str]:
+    return ["fp32"] + [name for name in names if name != "fp32"]
+
+
 def config_from_preset(name: str, **overrides) -> RunConfig:
     if name not in PRESETS:
         raise ValueError(f"unknown preset: {name}")
@@ -384,9 +388,8 @@ def run(cfg: RunConfig) -> dict:
         print(f"[data] contexts without data: {unavailable}", flush=True)
 
     # Always run the fp32 reference, even if it is not in the weight list.
-    weight_names = list(cfg.weights)
-    if "fp32" not in weight_names:
-        weight_names.insert(0, "fp32")
+    # fp32 runs first regardless of position, so every later run has a reference.
+    weight_names = _weight_order(cfg.weights)
     specs = weight_specs(weight_names)
 
     results: dict[str, Any] = {

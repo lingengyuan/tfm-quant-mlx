@@ -333,6 +333,55 @@ def build_covariate_windows(
     )
 
 
+def build_horizon_windows(
+    series_set: SeriesSet,
+    context: int,
+    horizons: tuple[int, ...],
+    num_windows: int,
+) -> tuple[np.ndarray, dict[int, np.ndarray], np.ndarray, list[int]] | None:
+    """Windows shared across horizons, so stitching is the only difference.
+
+    Window ends leave room for the longest horizon; each horizon slices its own
+    target prefix. Returns ``(contexts, targets_by_horizon, scales, channels)``.
+    """
+    if not horizons:
+        raise ValueError("horizons must not be empty")
+    longest = max(horizons)
+    min_len = context + longest
+    usable = [i for i, s in enumerate(series_set.series) if len(s) >= min_len]
+    if not usable:
+        return None
+    length = min(len(series_set.series[i]) for i in usable)
+    first_end = context
+    last_end = length - longest
+    count = max(1, min(num_windows, (last_end - first_end) // max(1, longest) + 1))
+    ends = np.linspace(first_end, last_end, count).astype(int)
+
+    contexts, scales = [], []
+    targets: dict[int, list[np.ndarray]] = {horizon: [] for horizon in horizons}
+    for end in ends:
+        for ch in usable:
+            series = series_set.series[ch]
+            ctx = series[end - context : end]
+            windows = {horizon: series[end : end + horizon] for horizon in horizons}
+            if not np.isfinite(ctx).all():
+                continue
+            if not all(np.isfinite(target).all() for target in windows.values()):
+                continue
+            contexts.append(ctx)
+            scales.append(max(float(np.std(ctx)), 1e-6))
+            for horizon, target in windows.items():
+                targets[horizon].append(target)
+    if not contexts:
+        return None
+    return (
+        np.stack(contexts).astype(np.float32),
+        {horizon: np.stack(values).astype(np.float32) for horizon, values in targets.items()},
+        np.asarray(scales, dtype=np.float32),
+        usable,
+    )
+
+
 def eval_windows(
     data_dir: str,
     datasets: tuple[str, ...],

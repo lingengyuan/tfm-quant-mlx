@@ -259,13 +259,14 @@ def _findings(weight_runs: list[dict], kv_runs: list[dict], weight_ctx: int, kv_
         if run.get("weight", "fp32") != "fp32":
             continue
         peak = _get(run, "memory", str(kv_ctx), "peak_mb")
-        kv_peaks.append((run["name"], peak))
+        if peak:
+            kv_peaks.append((run["name"], peak))
     if fp32 and kv_peaks:
         fp32_peak = _get(fp32, "memory", str(kv_ctx), "peak_mb")
         if fp32_peak:
             lines.append(
-                f"KV 压缩后峰值显存为 {min(p for _, p in kv_peaks if p):.0f}–"
-                f"{max(p for _, p in kv_peaks if p):.0f} MB，fp32 为 {fp32_peak:.0f} MB；"
+                f"KV 压缩后峰值显存为 {min(p for _, p in kv_peaks):.0f}–"
+                f"{max(p for _, p in kv_peaks):.0f} MB，fp32 为 {fp32_peak:.0f} MB；"
                 "解码回 fp32 抵消了逻辑 K/V 的缩减。"
             )
     bad = [
@@ -286,8 +287,11 @@ def generate(path: str) -> str:
         data = json.load(f)
     env = data.get("env", {})
     cfg = data.get("meta", {}).get("config", {})
-    weight_runs = data.get("weight_runs", [])
-    kv_runs = data.get("kv_runs", [])
+    raw_weight = data.get("weight_runs", [])
+    raw_kv = data.get("kv_runs", [])
+    weight_runs = [run for run in raw_weight if "error" not in run]
+    kv_runs = [run for run in raw_kv if "error" not in run]
+    failed = [run for run in raw_weight + raw_kv if "error" in run]
     contexts = sorted({int(c) for run in weight_runs for c in run.get("macro", {})})
     kv_contexts = sorted({int(c) for run in kv_runs for c in run.get("macro", {})})
     headline = 2048 if 2048 in contexts else (contexts[0] if contexts else 512)
@@ -361,6 +365,11 @@ def generate(path: str) -> str:
         "- 吞吐为 batch 1/8/32 的中位延迟。",
         "- int4_g128 跳过输入维不整除 128 的层（192 维残差块），这些层保持 fp32。",
     ]
+    if failed:
+        notes.append(
+            "- 失败运行："
+            + "；".join(f"{run.get('name')}: {run.get('error')}" for run in failed)
+        )
     if kv_runs:
         notes += [
             "- TimesFM 3.0 MLX 为单次全序列前向，没有跨调用 KV cache；此处 KV 指每层注意力的 K/V 工作集。",

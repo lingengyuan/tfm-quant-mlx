@@ -1,7 +1,7 @@
 {
   "meta": {
-    "created": "2026-11-02T16:13:40+0800",
-    "elapsed_s": 220.6,
+    "created": "2026-11-03T10:21:29+0800",
+    "elapsed_s": 216.7,
     "config": {
       "checkpoint": "models/timesfm-3.0",
       "data_dir": "data/raw",
@@ -13,6 +13,7 @@
       ],
       "synthetic": false,
       "multi": true,
+      "max_channels": 0,
       "contexts": [
         15360
       ],
@@ -123,7 +124,8 @@
         "group_size": 64,
         "quantize_head": false,
         "skip_prefixes": [],
-        "overrides": []
+        "overrides": [],
+        "clip": null
       },
       "effective_bits": null,
       "weight_bytes": 1322843904,
@@ -291,9 +293,9 @@
             "batch": 1,
             "context": 15360,
             "variates": 7,
-            "latency_ms_p50": 685.3914164967136,
-            "latency_ms_p95": 687.7151035514544,
-            "series_per_s": 10.213142200962425
+            "latency_ms_p50": 745.2264585008379,
+            "latency_ms_p95": 750.0364333594916,
+            "series_per_s": 9.393117917581463
           }
         }
       },
@@ -625,9 +627,9 @@
             "batch": 1,
             "context": 15360,
             "variates": 7,
-            "latency_ms_p50": 740.8541044860613,
-            "latency_ms_p95": 742.4515104357852,
-            "series_per_s": 9.448553983318993
+            "latency_ms_p50": 768.6324794922257,
+            "latency_ms_p95": 771.7645357552101,
+            "series_per_s": 9.107083276814354
           }
         }
       },
@@ -965,9 +967,9 @@
             "batch": 1,
             "context": 15360,
             "variates": 7,
-            "latency_ms_p50": 802.5316459825262,
-            "latency_ms_p95": 812.540564883966,
-            "series_per_s": 8.722397471852982
+            "latency_ms_p50": 763.9144790009595,
+            "latency_ms_p95": 765.1433722989168,
+            "series_per_s": 9.163329394089423
           }
         }
       },
@@ -1305,9 +1307,9 @@
             "batch": 1,
             "context": 15360,
             "variates": 7,
-            "latency_ms_p50": 768.7661459931405,
-            "latency_ms_p95": 768.8529023973388,
-            "series_per_s": 9.105499814845462
+            "latency_ms_p50": 747.1862289967248,
+            "latency_ms_p95": 747.7788979027537,
+            "series_per_s": 9.36848101362784
           }
         }
       },
@@ -1334,9 +1336,9 @@
       "name": "turbo3_mse",
       "weight": "fp32",
       "kv_scope": "both",
-      "bits_k": 3.2265625,
-      "bits_v": 3.2265625,
-      "bits_per_value": 3.2265625,
+      "bits_k": 5.1625,
+      "bits_v": 5.1625,
+      "bits_per_value": 5.1625,
       "accuracy": {
         "ETTh1": {
           "15360": {
@@ -1645,9 +1647,9 @@
             "batch": 1,
             "context": 15360,
             "variates": 7,
-            "latency_ms_p50": 1864.4681250152644,
-            "latency_ms_p95": 1901.386050315341,
-            "series_per_s": 3.754421921234342
+            "latency_ms_p50": 1788.7405834917445,
+            "latency_ms_p95": 1809.3546708318172,
+            "series_per_s": 3.9133679106981063
           }
         }
       },
@@ -1661,9 +1663,9 @@
           "activation_mb": 4454.806318
         }
       },
-      "kv_logical_bytes": 1114769600,
+      "kv_logical_bytes": 1783631360,
       "kv_fp16_bytes": 5527961600,
-      "kv_reduction": 4.958837772397095,
+      "kv_reduction": 3.099273607748184,
       "kv_calls": 80,
       "kv_probe": {
         "batch": 8,

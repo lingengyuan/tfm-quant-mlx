@@ -1,7 +1,7 @@
 {
   "meta": {
-    "created": "2026-11-02T15:43:49+0800",
-    "elapsed_s": 615.9,
+    "created": "2026-11-03T10:11:36+0800",
+    "elapsed_s": 592.2,
     "config": {
       "checkpoint": "models/timesfm-3.0",
       "data_dir": "data/raw",
@@ -13,6 +13,7 @@
       ],
       "synthetic": false,
       "multi": true,
+      "max_channels": 0,
       "contexts": [
         2048,
         15360
@@ -32,6 +33,9 @@
       ],
       "kv_weights": [
         "fp32"
+      ],
+      "kv_scopes": [
+        "both"
       ],
       "kv_contexts": [
         2048,
@@ -130,7 +134,8 @@
         "group_size": 64,
         "quantize_head": false,
         "skip_prefixes": [],
-        "overrides": []
+        "overrides": [],
+        "clip": null
       },
       "effective_bits": null,
       "weight_bytes": 1322843904,
@@ -443,17 +448,17 @@
             "batch": 1,
             "context": 2048,
             "variates": 7,
-            "latency_ms_p50": 82.09308399818838,
-            "latency_ms_p95": 86.3017458905233,
-            "series_per_s": 85.26905872064053
+            "latency_ms_p50": 88.59487500740215,
+            "latency_ms_p95": 91.91849939234089,
+            "series_per_s": 79.01134235377775
           },
           "8": {
             "batch": 8,
             "context": 2048,
             "variates": 7,
-            "latency_ms_p50": 616.0164170141798,
-            "latency_ms_p95": 620.3752663976047,
-            "series_per_s": 90.90666815574652
+            "latency_ms_p50": 680.1760829985142,
+            "latency_ms_p95": 800.0498955138028,
+            "series_per_s": 82.33162176642182
           }
         },
         "15360": {
@@ -461,17 +466,17 @@
             "batch": 1,
             "context": 15360,
             "variates": 7,
-            "latency_ms_p50": 693.0298749939539,
-            "latency_ms_p95": 739.4356380944373,
-            "series_per_s": 10.100574668676542
+            "latency_ms_p50": 741.1816670210101,
+            "latency_ms_p95": 746.1005045188358,
+            "series_per_s": 9.444378229341138
           },
           "8": {
             "batch": 8,
             "context": 15360,
             "variates": 7,
-            "latency_ms_p50": 5486.5025829931255,
-            "latency_ms_p95": 5491.968770790845,
-            "series_per_s": 10.206866606348989
+            "latency_ms_p50": 5833.800249994965,
+            "latency_ms_p95": 6117.810512208962,
+            "series_per_s": 9.599231650080636
           }
         }
       },
@@ -504,7 +509,8 @@
         "group_size": 64,
         "quantize_head": false,
         "skip_prefixes": [],
-        "overrides": []
+        "overrides": [],
+        "clip": null
       },
       "effective_bits": 9.0,
       "weight_bytes": 374640384,
@@ -1107,17 +1113,17 @@
             "batch": 1,
             "context": 2048,
             "variates": 7,
-            "latency_ms_p50": 81.96433298871852,
-            "latency_ms_p95": 83.36825828882866,
-            "series_per_s": 85.40300085115646
+            "latency_ms_p50": 83.93420901848003,
+            "latency_ms_p95": 85.5773831193801,
+            "series_per_s": 83.3986533245198
           },
           "8": {
             "batch": 8,
             "context": 2048,
             "variates": 7,
-            "latency_ms_p50": 616.9843329989817,
-            "latency_ms_p95": 620.2383954980178,
-            "series_per_s": 90.76405510622978
+            "latency_ms_p50": 671.5116660052445,
+            "latency_ms_p95": 675.1526547042886,
+            "series_per_s": 83.39393466257762
           }
         },
         "15360": {
@@ -1125,17 +1131,17 @@
             "batch": 1,
             "context": 15360,
             "variates": 7,
-            "latency_ms_p50": 715.958207991207,
-            "latency_ms_p95": 717.9759333026595,
-            "series_per_s": 9.777106990141483
+            "latency_ms_p50": 814.6995830175001,
+            "latency_ms_p95": 893.0704958038405,
+            "series_per_s": 8.592124196348873
           },
           "8": {
             "batch": 8,
             "context": 15360,
             "variates": 7,
-            "latency_ms_p50": 5486.049125000136,
-            "latency_ms_p95": 5489.840825006831,
-            "series_per_s": 10.207710270913516
+            "latency_ms_p50": 5751.629750011489,
+            "latency_ms_p95": 5827.073412798927,
+            "series_per_s": 9.736370808619617
           }
         }
       },
@@ -1168,7 +1174,8 @@
         "group_size": 64,
         "quantize_head": false,
         "skip_prefixes": [],
-        "overrides": []
+        "overrides": [],
+        "clip": null
       },
       "effective_bits": 5.0,
       "weight_bytes": 209735424,
@@ -1771,17 +1778,17 @@
             "batch": 1,
             "context": 2048,
             "variates": 7,
-            "latency_ms_p50": 84.24845800618641,
-            "latency_ms_p95": 85.64544610271696,
-            "series_per_s": 83.08757413086404
+            "latency_ms_p50": 88.01408400177024,
+            "latency_ms_p95": 90.3756461921148,
+            "series_per_s": 79.53272569261992
           },
           "8": {
             "batch": 8,
             "context": 2048,
             "variates": 7,
-            "latency_ms_p50": 620.4959579918068,
-            "latency_ms_p95": 624.9928835924948,
-            "series_per_s": 90.25038645092904
+            "latency_ms_p50": 669.4555830035824,
+            "latency_ms_p95": 731.7138714104658,
+            "series_per_s": 83.65006046965827
           }
         },
         "15360": {
@@ -1789,17 +1796,17 @@
             "batch": 1,
             "context": 15360,
             "variates": 7,
-            "latency_ms_p50": 713.944207993336,
-            "latency_ms_p95": 738.783757991041,
-            "series_per_s": 9.804687707565712
+            "latency_ms_p50": 704.274332994828,
+            "latency_ms_p95": 704.9470461031888,
+            "series_per_s": 9.939308692726994
           },
           "8": {
             "batch": 8,
             "context": 15360,
             "variates": 7,
-            "latency_ms_p50": 5440.005290991394,
-            "latency_ms_p95": 5446.758890998899,
-            "series_per_s": 10.294107634920055
+            "latency_ms_p50": 5568.231207987992,
+            "latency_ms_p95": 5598.653533603647,
+            "series_per_s": 10.057053651016563
           }
         }
       },
@@ -1845,7 +1852,8 @@
             "pre_transformer_resblock",
             8
           ]
-        ]
+        ],
+        "clip": null
       },
       "effective_bits": null,
       "weight_bytes": 227184384,
@@ -2448,17 +2456,17 @@
             "batch": 1,
             "context": 2048,
             "variates": 7,
-            "latency_ms_p50": 86.64295900962315,
-            "latency_ms_p95": 87.30648400669452,
-            "series_per_s": 80.79133122891766
+            "latency_ms_p50": 81.84366600471549,
+            "latency_ms_p95": 81.87824130291119,
+            "series_per_s": 85.52891557419592
           },
           "8": {
             "batch": 8,
             "context": 2048,
             "variates": 7,
-            "latency_ms_p50": 666.3563339971006,
-            "latency_ms_p95": 669.9832583864918,
-            "series_per_s": 84.03912012674537
+            "latency_ms_p50": 643.1988749827724,
+            "latency_ms_p95": 660.5125503090676,
+            "series_per_s": 87.06482890148077
           }
         },
         "15360": {
@@ -2466,17 +2474,17 @@
             "batch": 1,
             "context": 15360,
             "variates": 7,
-            "latency_ms_p50": 735.61470900313,
-            "latency_ms_p95": 774.8971205990529,
-            "series_per_s": 9.515851048555115
+            "latency_ms_p50": 710.4549999930896,
+            "latency_ms_p95": 725.365225301357,
+            "series_per_s": 9.852840785226492
           },
           "8": {
             "batch": 8,
             "context": 15360,
             "variates": 7,
-            "latency_ms_p50": 5797.946708014933,
-            "latency_ms_p95": 5823.626258585136,
-            "series_per_s": 9.65859170843827
+            "latency_ms_p50": 5529.850249993615,
+            "latency_ms_p95": 5573.025762796169,
+            "series_per_s": 10.12685650937196
           }
         }
       },
@@ -2504,6 +2512,7 @@
     {
       "name": "affine4",
       "weight": "fp32",
+      "kv_scope": "both",
       "bits_k": 5.0,
       "bits_v": 5.0,
       "bits_per_value": 5.0,
@@ -3105,17 +3114,17 @@
             "batch": 1,
             "context": 2048,
             "variates": 7,
-            "latency_ms_p50": 99.39187500276603,
-            "latency_ms_p95": 100.78537559893448,
-            "series_per_s": 70.42829204907537
+            "latency_ms_p50": 96.0234579979442,
+            "latency_ms_p95": 98.76332080748398,
+            "series_per_s": 72.89885352962257
           },
           "8": {
             "batch": 8,
             "context": 2048,
             "variates": 7,
-            "latency_ms_p50": 788.0515000142623,
-            "latency_ms_p95": 793.6106128123356,
-            "series_per_s": 71.06134560874068
+            "latency_ms_p50": 752.7409589965828,
+            "latency_ms_p95": 825.896445591934,
+            "series_per_s": 74.39478260177181
           }
         },
         "15360": {
@@ -3123,17 +3132,17 @@
             "batch": 1,
             "context": 15360,
             "variates": 7,
-            "latency_ms_p50": 878.7165420071688,
-            "latency_ms_p95": 896.6244045033818,
-            "series_per_s": 7.966163905382462
+            "latency_ms_p50": 792.9554999864195,
+            "latency_ms_p95": 794.6407878072932,
+            "series_per_s": 8.82773371282485
           },
           "8": {
             "batch": 8,
             "context": 15360,
             "variates": 7,
-            "latency_ms_p50": 6803.955833020154,
-            "latency_ms_p95": 6911.347658021259,
-            "series_per_s": 8.230506101792638
+            "latency_ms_p50": 6704.361874988535,
+            "latency_ms_p95": 6807.113749993732,
+            "series_per_s": 8.352771083093685
           }
         }
       },
@@ -3167,6 +3176,7 @@
     {
       "name": "affine4_l19fp16",
       "weight": "fp32",
+      "kv_scope": "both",
       "bits_k": 5.55,
       "bits_v": 5.55,
       "bits_per_value": 5.55,
@@ -3768,17 +3778,17 @@
             "batch": 1,
             "context": 2048,
             "variates": 7,
-            "latency_ms_p50": 107.74087501340546,
-            "latency_ms_p95": 109.27803718659561,
-            "series_per_s": 64.97069936668917
+            "latency_ms_p50": 92.1726250089705,
+            "latency_ms_p95": 92.42244970228057,
+            "series_per_s": 75.94445747117152
           },
           "8": {
             "batch": 8,
             "context": 2048,
             "variates": 7,
-            "latency_ms_p50": 809.3591250071768,
-            "latency_ms_p95": 809.4738749903627,
-            "series_per_s": 69.19054628500474
+            "latency_ms_p50": 773.5730409913231,
+            "latency_ms_p95": 831.9856285088463,
+            "series_per_s": 72.3913541871066
           }
         },
         "15360": {
@@ -3786,17 +3796,17 @@
             "batch": 1,
             "context": 15360,
             "variates": 7,
-            "latency_ms_p50": 894.6312080079224,
-            "latency_ms_p95": 945.2128208096838,
-            "series_per_s": 7.824453179525134
+            "latency_ms_p50": 843.1796669901814,
+            "latency_ms_p95": 978.105041696108,
+            "series_per_s": 8.301907972932076
           },
           "8": {
             "batch": 8,
             "context": 15360,
             "variates": 7,
-            "latency_ms_p50": 7106.846917013172,
-            "latency_ms_p95": 7145.051578601124,
-            "series_per_s": 7.879725095237507
+            "latency_ms_p50": 6191.231291973963,
+            "latency_ms_p95": 6480.470516392961,
+            "series_per_s": 9.045050549572572
           }
         }
       },
@@ -3830,9 +3840,10 @@
     {
       "name": "turbo3_mse",
       "weight": "fp32",
-      "bits_k": 3.2265625,
-      "bits_v": 3.2265625,
-      "bits_per_value": 3.2265625,
+      "kv_scope": "both",
+      "bits_k": 5.1625,
+      "bits_v": 5.1625,
+      "bits_per_value": 5.1625,
       "accuracy": {
         "ETTh1": {
           "2048": {
@@ -4431,17 +4442,17 @@
             "batch": 1,
             "context": 2048,
             "variates": 7,
-            "latency_ms_p50": 288.125500024762,
-            "latency_ms_p95": 289.7642874828307,
-            "series_per_s": 24.294968683432767
+            "latency_ms_p50": 214.4933329836931,
+            "latency_ms_p95": 214.88074609369505,
+            "series_per_s": 32.635046985503166
           },
           "8": {
             "batch": 8,
             "context": 2048,
             "variates": 7,
-            "latency_ms_p50": 2134.2282090045046,
-            "latency_ms_p95": 2184.103583704564,
-            "series_per_s": 26.2389934514645
+            "latency_ms_p50": 1786.726207996253,
+            "latency_ms_p95": 1789.186246416648,
+            "series_per_s": 31.342239090342733
           }
         },
         "15360": {
@@ -4449,17 +4460,17 @@
             "batch": 1,
             "context": 15360,
             "variates": 7,
-            "latency_ms_p50": 1947.3949999955948,
-            "latency_ms_p95": 1995.108725008322,
-            "series_per_s": 3.594545533913682
+            "latency_ms_p50": 1730.9281250054482,
+            "latency_ms_p95": 1732.580300013069,
+            "series_per_s": 4.04407317604708
           },
           "8": {
             "batch": 8,
             "context": 15360,
             "variates": 7,
-            "latency_ms_p50": 16230.276540998602,
-            "latency_ms_p95": 17098.371279094135,
-            "series_per_s": 3.4503417029611794
+            "latency_ms_p50": 15210.538874991471,
+            "latency_ms_p95": 15267.372862511547,
+            "series_per_s": 3.6816578597404495
           }
         }
       },
@@ -4476,14 +4487,14 @@
           "batch": 8,
           "context": 15360,
           "variates": 7,
-          "peak_mb": 5785.852356,
+          "peak_mb": 5785.850428,
           "resident_mb": 1331.046038,
-          "activation_mb": 4454.806318
+          "activation_mb": 4454.80439
         }
       },
-      "kv_logical_bytes": 1114769600,
+      "kv_logical_bytes": 1783631360,
       "kv_fp16_bytes": 5527961600,
-      "kv_reduction": 4.958837772397095,
+      "kv_reduction": 3.099273607748184,
       "kv_calls": 80,
       "kv_probe": {
         "batch": 8,

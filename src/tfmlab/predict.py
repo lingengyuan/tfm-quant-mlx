@@ -58,11 +58,19 @@ def series_from_frame(frame: pd.DataFrame, context: int) -> dict[str, np.ndarray
 def stacked_series(
     frame: pd.DataFrame, context: int
 ) -> tuple[list[str], np.ndarray, int]:
-    """Columns truncated to a common tail, stacked as variates."""
-    series = series_from_frame(frame, context)
-    length = min(len(values) for values in series.values())
-    names = list(series)
-    return names, np.stack([series[name][-length:] for name in names]), length
+    """Rows with any missing value dropped, then stacked as variates.
+
+    Dropping per column would shift different timestamps together, so the row
+    mask is shared across all numeric columns.
+    """
+    numeric = frame.select_dtypes(include=[np.number])
+    if numeric.shape[1] == 0:
+        raise ValueError("input has no numeric columns")
+    numeric = numeric.dropna(axis=0, how="any")
+    if len(numeric) < 2:
+        raise ValueError("fewer than two complete rows across numeric columns")
+    values = numeric.to_numpy(dtype=np.float32)[-context:]
+    return [str(column) for column in numeric.columns], values.T, len(values)
 
 
 def format_forecast(name: str, pred: np.ndarray) -> pd.DataFrame:

@@ -205,13 +205,14 @@ class TurboKV(KVCompressor):
                 _analytic_codebook(level, self.bins) if level > 1 else _uniform_codebook(level, self.bins)
             )
             self._codebooks.append((mx.array(edges), mx.array(centers)))
-        self.bits_k = self.bits_v = (
-            math.fsum(self._levels) * self.angle_bits + 32
-        ) / self._padded
+        # Per-vector bits: one angle per pair per level, one fp32 norm, and for
+        # prod a fp32 residual norm plus one sign per padded dimension. Divide
+        # by the original dim, because shape-based byte counts use it.
+        bits_per_value = (math.fsum(self._levels) * self.angle_bits + 32) / dim
         if self.mode == "prod":
             self._Sq = mx.array(_orthogonal(self._padded, self._seed + 1))
-            self.bits_k += 1.0
-            self.bits_v += 1.0
+            bits_per_value += (self._padded + 32) / dim
+        self.bits_k = self.bits_v = bits_per_value
 
     def _roundtrip(self, x: mx.array) -> mx.array:
         shape = x.shape
@@ -225,8 +226,10 @@ class TurboKV(KVCompressor):
         recon = self._decode_angles(codes, norms)
         if self.mode == "prod":
             residual = rotated - recon
+            residual_norm = mx.linalg.norm(residual, axis=-1)
             signs = mx.where(residual @ mx.transpose(self._Sq) >= 0, 1.0, -1.0)
-            recon = recon + (math.sqrt(math.pi / 2) / self._padded) * (signs @ self._Sq)
+            scale = residual_norm * math.sqrt(math.pi / (2.0 * self._padded))
+            recon = recon + scale[:, None] * (signs @ self._Sq)
         out = recon @ self._S
         out = out[:, :d].reshape(shape)
         return out.astype(x.dtype)
@@ -292,7 +295,7 @@ class QJLKV(KVCompressor):
             flat = mx.pad(flat, ((0, 0), (0, self._padded - d)))
         norms = mx.linalg.norm(flat, axis=-1)
         signs = mx.where((flat @ mx.transpose(self._S)) >= 0, 1.0, -1.0)
-        scale = math.sqrt(math.pi / 2) / self._padded
+        scale = math.sqrt(math.pi / (2.0 * self._padded))
         out = (signs @ self._S) * (norms * scale)[:, None]
         out = out[:, :d].reshape(shape)
         return out.astype(x.dtype)

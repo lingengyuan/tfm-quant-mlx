@@ -1,7 +1,7 @@
 {
   "meta": {
-    "created": "2026-11-02T16:00:59+0800",
-    "elapsed_s": 237.6,
+    "created": "2026-11-03T10:38:48+0800",
+    "elapsed_s": 213.4,
     "config": {
       "checkpoint": "models/timesfm-3.0",
       "data_dir": "data/raw",
@@ -13,6 +13,7 @@
       ],
       "synthetic": false,
       "multi": true,
+      "max_channels": 0,
       "contexts": [
         15360
       ],
@@ -122,7 +123,8 @@
         "group_size": 64,
         "quantize_head": false,
         "skip_prefixes": [],
-        "overrides": []
+        "overrides": [],
+        "clip": null
       },
       "effective_bits": null,
       "weight_bytes": 1322843904,
@@ -290,9 +292,9 @@
             "batch": 1,
             "context": 15360,
             "variates": 7,
-            "latency_ms_p50": 708.4729170019273,
-            "latency_ms_p95": 708.4729170019273,
-            "series_per_s": 9.880405915334316
+            "latency_ms_p50": 717.5364999857266,
+            "latency_ms_p95": 717.5364999857266,
+            "series_per_s": 9.755601283194995
           }
         }
       },
@@ -624,9 +626,9 @@
             "batch": 1,
             "context": 15360,
             "variates": 7,
-            "latency_ms_p50": 725.9894169983454,
-            "latency_ms_p95": 725.9894169983454,
-            "series_per_s": 9.642013831196046
+            "latency_ms_p50": 744.827833987074,
+            "latency_ms_p95": 744.827833987074,
+            "series_per_s": 9.39814502168763
           }
         }
       },
@@ -653,9 +655,9 @@
       "name": "turbo3_mse@seq",
       "weight": "fp32",
       "kv_scope": "seq",
-      "bits_k": 3.2265625,
-      "bits_v": 3.2265625,
-      "bits_per_value": 3.2265625,
+      "bits_k": 5.1625,
+      "bits_v": 5.1625,
+      "bits_per_value": 5.1625,
       "accuracy": {
         "ETTh1": {
           "15360": {
@@ -964,9 +966,9 @@
             "batch": 1,
             "context": 15360,
             "variates": 7,
-            "latency_ms_p50": 1332.3986250034068,
-            "latency_ms_p95": 1332.3986250034068,
-            "series_per_s": 5.253682995944327
+            "latency_ms_p50": 1248.2677919906564,
+            "latency_ms_p95": 1248.2677919906564,
+            "series_per_s": 5.607771060756806
           }
         }
       },
@@ -980,9 +982,9 @@
           "activation_mb": 4454.806318
         }
       },
-      "kv_logical_bytes": 557384800,
+      "kv_logical_bytes": 891815680,
       "kv_fp16_bytes": 2763980800,
-      "kv_reduction": 4.958837772397095,
+      "kv_reduction": 3.099273607748184,
       "kv_calls": 40,
       "kv_probe": {
         "batch": 8,
@@ -1304,9 +1306,9 @@
             "batch": 1,
             "context": 15360,
             "variates": 7,
-            "latency_ms_p50": 905.0318330118898,
-            "latency_ms_p95": 905.0318330118898,
-            "series_per_s": 7.7345345706840325
+            "latency_ms_p50": 767.3381249769591,
+            "latency_ms_p95": 767.3381249769591,
+            "series_per_s": 9.12244520655114
           }
         }
       },
@@ -1333,9 +1335,9 @@
       "name": "turbo3_mse@var",
       "weight": "fp32",
       "kv_scope": "var",
-      "bits_k": 3.2265625,
-      "bits_v": 3.2265625,
-      "bits_per_value": 3.2265625,
+      "bits_k": 5.1625,
+      "bits_v": 5.1625,
+      "bits_per_value": 5.1625,
       "accuracy": {
         "ETTh1": {
           "15360": {
@@ -1644,9 +1646,9 @@
             "batch": 1,
             "context": 15360,
             "variates": 7,
-            "latency_ms_p50": 1470.566083007725,
-            "latency_ms_p95": 1470.566083007725,
-            "series_per_s": 4.760071703600707
+            "latency_ms_p50": 1302.57654201705,
+            "latency_ms_p95": 1302.57654201705,
+            "series_per_s": 5.37396442681245
           }
         }
       },
@@ -1660,9 +1662,9 @@
           "activation_mb": 4454.80439
         }
       },
-      "kv_logical_bytes": 557384800,
+      "kv_logical_bytes": 891815680,
       "kv_fp16_bytes": 2763980800,
-      "kv_reduction": 4.958837772397095,
+      "kv_reduction": 3.099273607748184,
       "kv_calls": 40,
       "kv_probe": {
         "batch": 8,

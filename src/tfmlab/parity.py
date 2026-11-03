@@ -54,7 +54,10 @@ def _torch_predictions(cfg: ParityConfig, contexts: np.ndarray) -> np.ndarray:
     forecaster = TimesFM3Forecaster.from_pretrained(cfg.checkpoint, device=cfg.device)
     outputs = list(
         forecaster.predict_batch(
-            [context for context in contexts], cfg.horizon, return_quantiles=True
+            [context for context in contexts],
+            cfg.horizon,
+            return_quantiles=True,
+            sort_quantiles=False,
         )
     )
     if any(output.quantiles is None for output in outputs):

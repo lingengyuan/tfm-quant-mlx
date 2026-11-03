@@ -14,12 +14,12 @@ The Chinese README ([README.md](README.md)) carries the full tables and per-sect
 - `fp16` / `bf16`: 1323 → 661 MB (2.00×), pinball change ≤0.05%. `int8_g64`: 375 MB (3.53×), +0.11%.
 - Plain `int4`: 191–251 MB, pinball +10–12%, quantile crossing 9–19%. Loss concentrates in the last layer (+7.9%) and the output head (+67.8% at 4-bit).
 - 4-bit that works: `mix_l18_19_8` 227 MB (5.82×), +0.80%; clipping 0.95 (`mix_l18_19_8c95`) reaches −0.22% on ETT and +0.61% on Jena, but is worse on traffic (+2.00%).
-- KV: `affine8` 1.78× (−0.01%), `affine4` 3.20× (+0.52%), `turbo3_mse` 4.96× (+2.71%). 1-bit QJL is unusable (+73%).
-- KV error also concentrates in the last block: keeping layer 19 at fp16 moves `affine4` from +0.52% to **−0.36%** (137 MB, 2.88×).
+- KV: `affine8` 1.78× (−0.01%), `affine4` 3.20× (+0.52%), `turbo3_mse` 3.10× (+2.71%). `qjl1` also reaches 1.78× but compresses only K, so it stays the worst at that ratio (+4.73%).
+- KV error also concentrates in the last block: keeping layer 19 at fp16 moves `affine4` from +0.52% to **−0.36%** (137 MB, 2.88×) and `turbo3_mse` from +2.71% to +0.69% (141 MB, 2.80×).
 - Multivariate: fp32 pinball 0.1152 vs 0.1168 univariate; KV loss grows ~6× because variate attention is sensitive. Sequence `affine4` + variate `affine8` gives +1.15% at 2.29×.
 - Covariates: dropping them costs +4.98% pinball; int4 rises to +17.2%, while the seq/var KV mix stays at −0.91%.
 - Throughput does not improve: at 482 tokens int4 GEMM is 9% slower; end-to-end differences stay ≤9%. The gain from 4-bit is memory (2774 → 1717 MB).
-- Cross-backend baseline: MLX fp32 vs PyTorch on 56 series, mean normalized deviation 0.0013, pinball difference −0.001%.
+- Cross-backend baseline: MLX fp32 vs PyTorch on 56 series, mean normalized deviation 0.0013 (max 0.0081), pinball difference −0.001%.
 
 ## Results
 
@@ -44,14 +44,14 @@ The Chinese README ([README.md](README.md)) carries the full tables and per-sect
 
 | KV mode | K bits | V bits | KV MB | reduction | nMAE | ΔnMAE | Δpinball | point dev | cov err | series/s | peak MB |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| affine8 | 9.00 | 9.00 | 222 | 1.78× | 0.3193 | +0.01% | −0.01% | 0.0022 | 0.0401 | 7 | 2856 |
-| affine4 | 5.00 | 5.00 | 123 | 3.20× | 0.3202 | +0.62% | +0.52% | 0.0382 | 0.0431 | 8 | 2846 |
-| affine4_l19fp16 | 5.55 | 5.55 | 137 | 2.88× | 0.3177 | −0.28% | −0.36% | 0.0236 | 0.0421 | 8 | 2846 |
-| turbo3_mse | 3.23 | 3.23 | 80 | 4.96× | 0.3257 | +2.32% | +2.71% | 0.0607 | 0.0404 | 5 | 2921 |
-| turbo3_l19fp16 | 3.87 | 3.87 | 95 | 4.14× | 0.3198 | +0.43% | +0.69% | 0.0382 | 0.0408 | 5 | 2921 |
-| turbo3_prod | 3.23 | 3.23 | 80 | 4.95× | 0.3439 | +8.80% | +10.34% | 0.1399 | 0.0419 | 4 | 2883 |
-| turbo2_mse | 2.23 | 2.23 | 55 | 7.16× | 0.3524 | +11.51% | +11.86% | 0.1443 | 0.0453 | 5 | 2857 |
-| qjl1 | 2.00 | 16.00 | 222 | 1.78× | 0.5365 | +70.09% | +73.33% | 0.4491 | 0.0294 | 7 | 2968 |
+| affine8 | 9.00 | 9.00 | 222 | 1.78× | 0.3193 | +0.01% | −0.01% | 0.0022 | 0.0401 | 11 | 2856 |
+| affine4 | 5.00 | 5.00 | 123 | 3.20× | 0.3202 | +0.62% | +0.52% | 0.0382 | 0.0431 | 11 | 2847 |
+| affine4_l19fp16 | 5.55 | 5.55 | 137 | 2.88× | 0.3177 | −0.28% | −0.36% | 0.0236 | 0.0421 | 9 | 2847 |
+| turbo3_mse | 5.16 | 5.16 | 127 | 3.10× | 0.3257 | +2.32% | +2.71% | 0.0607 | 0.0404 | 6 | 2922 |
+| turbo3_l19fp16 | 5.70 | 5.70 | 141 | 2.80× | 0.3198 | +0.43% | +0.69% | 0.0382 | 0.0408 | 6 | 2922 |
+| turbo3_prod | 5.58 | 5.58 | 138 | 2.87× | 0.3304 | +4.52% | +5.04% | 0.1004 | 0.0464 | 6 | 2804 |
+| turbo2_mse | 3.58 | 3.58 | 88 | 4.48× | 0.3524 | +11.51% | +11.86% | 0.1443 | 0.0453 | 7 | 2858 |
+| qjl1 | 2.00 | 16.00 | 222 | 1.78× | 0.3328 | +4.84% | +4.73% | 0.1095 | 0.0382 | 11 | 2969 |
 
 More results: sensitivity ([weights](results/sensitivity.md), [KV layers/heads](results/kv_sensitivity.md)), [weight + KV combinations](results/combo_report.md), [multivariate](results/multi_report.md), [covariates](results/covariates.md), [domains](results/domains_report.md), [longer horizons](results/horizon.md), [profiling](results/profile.json), [PyTorch parity](results/parity.json).
 
@@ -133,7 +133,7 @@ tests/
 - `fp16`/`bf16` weights upcast in RoPE and running stats, so compute gains trail memory gains.
 - KV compression has no fused kernel: decompression counts toward latency and peak memory does not drop.
 - KV sensitivity covers 60 windows; sub-1% improvements should not be generalized.
-- Throughput is a single median latency. Three quick-preset repeats give 55.6–59.1 series/s at batch 8; per-cell run-to-run spread has a median of 13% and a max of 33%.
+- Throughput is a single median latency. Four quick-preset repeats give 67.9–77.3 series/s at batch 8; per-cell run-to-run spread has a median of 13% and a max of 69% on short-latency cells.
 - PyTorch parity runs on CPU only.
 - TimesFM 3.0 weights use a non-commercial license.
 

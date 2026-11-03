@@ -18,7 +18,7 @@ import numpy as np
 
 from . import metrics
 from .attention import install_kv_named
-from .data import eval_windows
+from .data import build_horizon_windows, load_ett
 from .runtime import load_model, measure_latency, predict, unload_model
 from .weights import apply_weight_spec, weight_specs
 
@@ -46,14 +46,27 @@ class HorizonConfig:
 
 
 def run(cfg: HorizonConfig) -> dict:
+    frames = []
+    for name in cfg.datasets:
+        built = build_horizon_windows(
+            load_ett(name, cfg.data_dir), cfg.context, cfg.horizons, cfg.windows
+        )
+        if built is not None:
+            frames.append(built)
+    if not frames:
+        raise ValueError("no windows for the requested horizons")
+    contexts = np.concatenate([frame[0] for frame in frames])
+    targets = {
+        horizon: np.concatenate([frame[1][horizon] for frame in frames])
+        for horizon in cfg.horizons
+    }
+    scales = np.concatenate([frame[2] for frame in frames])
+
     rows = []
     for horizon in cfg.horizons:
-        contexts, targets, scales = eval_windows(
-            cfg.data_dir, cfg.datasets, False, cfg.context, horizon, cfg.windows
-        )
         model = load_model(cfg.checkpoint)
         reference = predict(model, contexts, horizon, cfg.batch)
-        baseline = metrics.evaluate(reference, targets, scales)
+        baseline = metrics.evaluate(reference, targets[horizon], scales)
         unload_model(model)
         del model
 
@@ -64,7 +77,7 @@ def run(cfg: HorizonConfig) -> dict:
             if kv_name is not None:
                 install_kv_named(model, kv_name)
             pred = predict(model, contexts, horizon, cfg.batch)
-            score = metrics.compare(pred, reference, targets, scales)
+            score = metrics.compare(pred, reference, targets[horizon], scales)
             latency = measure_latency(
                 model, 8, cfg.context, horizon, repeats=cfg.repeats
             )

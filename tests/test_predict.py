@@ -18,7 +18,7 @@ def test_series_from_frame_takes_tail_and_drops_nan():
     assert series["b"].tolist() == [8.0, 9.0]
 
 
-def test_stacked_series_uses_common_tail():
+def test_stacked_series_drops_rows_across_all_columns():
     frame = pd.DataFrame(
         {"a": [1.0, 2.0, 3.0, 4.0, 5.0], "b": [0.0, np.nan, 3.0, 4.0, 5.0]}
     )
@@ -26,6 +26,8 @@ def test_stacked_series_uses_common_tail():
     assert names == ["a", "b"]
     assert length == 4
     assert contexts.shape == (2, 4)
+    # Rows 0, 2, 3, 4 survive; no column-local shifting.
+    assert contexts[0].tolist() == [1.0, 3.0, 4.0, 5.0]
     assert contexts[1].tolist() == [0.0, 3.0, 4.0, 5.0]
 
 

@@ -2,6 +2,7 @@ import numpy as np
 
 from tfmlab.data import (
     build_covariate_windows,
+    build_horizon_windows,
     build_multi_windows,
     build_windows,
     eval_windows,
@@ -63,3 +64,13 @@ def test_covariate_windows_split_target_and_covariates():
     assert past_only.shape == (2, len(series_set) - 1, 512)
     assert past_future.shape == (2, 2, 512 + 64)
     assert (scales > 0).all()
+
+
+def test_horizon_windows_share_contexts():
+    series_set = synthetic_set(length=6000)
+    out = build_horizon_windows(series_set, 512, (64, 256), 2)
+    assert out is not None
+    contexts, targets, scales, _ = out
+    assert targets[64].shape == (contexts.shape[0], 64)
+    assert targets[256].shape == (contexts.shape[0], 256)
+    assert len(scales) == contexts.shape[0]

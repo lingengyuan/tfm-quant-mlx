@@ -22,8 +22,9 @@ def _load_config(args) -> RunConfig:
             merged = dict(PRESETS[args.preset])
             merged.update(data)
             data = merged
-        return RunConfig.from_dict(data)
-    cfg = config_from_preset(args.preset or "quick")
+        cfg = RunConfig.from_dict(data)
+    else:
+        cfg = config_from_preset(args.preset or "quick")
     for key in ("checkpoint", "out", "windows", "repeats", "eval_batch"):
         value = getattr(args, key, None)
         if value is not None:
