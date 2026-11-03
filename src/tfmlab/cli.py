@@ -53,6 +53,14 @@ def _cmd_attention_compare(args) -> int:
     return 0
 
 
+def _cmd_compare(args) -> int:
+    from .compare import write as write_compare
+
+    text = write_compare(args.results, args.base, args.out)
+    print(f"wrote {args.out} ({len(text.splitlines())} lines)")
+    return 0
+
+
 def _cmd_convert(args) -> int:
     from .convert import ConvertConfig, run as run_convert
 
@@ -342,6 +350,14 @@ def main(argv: list[str] | None = None) -> int:
     att_p.add_argument("sdpa")
     att_p.add_argument("-o", "--out", default="results/attention.md")
     att_p.set_defaults(func=_cmd_attention_compare)
+
+    cmp_p = sub.add_parser(
+        "compare", help="paired comparison of two runs on the same windows"
+    )
+    cmp_p.add_argument("results")
+    cmp_p.add_argument("--base", required=True, help="run name to compare against")
+    cmp_p.add_argument("-o", "--out", default="results/compare.md")
+    cmp_p.set_defaults(func=_cmd_compare)
 
     args = parser.parse_args(argv)
     return args.func(args)

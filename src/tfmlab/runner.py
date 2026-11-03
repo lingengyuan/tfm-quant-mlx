@@ -92,6 +92,9 @@ class RunConfig:
     # "spread" samples forecast origins across the series; "tail" keeps the
     # most recent ones, which makes a probe offset a disjoint holdout block.
     window_mode: str = "spread"
+    # Tail windows to reserve at the end of each series, so a run can use a
+    # block of origins the evaluation grid does not cover.
+    offset: int = 0
     weights: tuple[str, ...] = ("fp32", "fp16", "bf16", "int8_g64", "int4_g64", "int4_g32", "int4_g128")
     kv: tuple[str, ...] = (
         "affine8",
@@ -203,6 +206,7 @@ def _load_data(cfg: RunConfig, contexts: tuple[int, ...]) -> tuple[dict[str, Ser
                     context,
                     cfg.horizon,
                     cfg.windows,
+                    offset=cfg.offset,
                     mode=cfg.window_mode,
                 )
             else:
@@ -211,6 +215,7 @@ def _load_data(cfg: RunConfig, contexts: tuple[int, ...]) -> tuple[dict[str, Ser
                     context,
                     cfg.horizon,
                     cfg.windows,
+                    offset=cfg.offset,
                     mode=cfg.window_mode,
                 )
             if windows is None:

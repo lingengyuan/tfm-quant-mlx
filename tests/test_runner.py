@@ -44,6 +44,13 @@ def test_multi_evaluation_follows_tail_windows():
     )
 
 
+def test_offset_reserves_recent_windows():
+    _, eval_data = _load_data(_cfg(window_mode="tail", offset=2), (256,))
+    data = eval_data[("synthetic", 256)]
+    reserved = SYNTHETIC_LENGTH - 64 - 2 * 64
+    assert sorted(set(data.groups.tolist())) == [reserved - 64, reserved]
+
+
 def test_group_ids_repeat_over_variates():
     _, eval_data = _load_data(_cfg(multi=True), (256,))
     data = eval_data[("synthetic", 256)]

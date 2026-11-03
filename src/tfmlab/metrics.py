@@ -96,6 +96,42 @@ def deviations(pred: np.ndarray, ref: np.ndarray, scales: np.ndarray) -> dict:
     }
 
 
+def paired_draws(
+    candidate: np.ndarray,
+    reference: np.ndarray,
+    groups: np.ndarray | None = None,
+    draws: int = 2000,
+    rng: np.random.Generator | None = None,
+) -> tuple[float, np.ndarray]:
+    """Relative change of two window losses, in percent, plus its draws.
+
+    ``groups`` holds each window's forecast origin; windows of one origin are
+    resampled together because they are correlated. Each draw recomputes both
+    means and keeps the sampled origins' window counts, so the statistic stays
+    a window mean.
+    """
+    candidate = np.asarray(candidate, dtype=float)
+    reference = np.asarray(reference, dtype=float)
+    if groups is None or len(groups) != len(candidate):
+        groups = np.arange(len(candidate))
+    _, origin_index = np.unique(np.asarray(groups), return_inverse=True)
+    origin_count = int(origin_index.max()) + 1
+    counts = np.bincount(origin_index, minlength=origin_count).astype(float)
+    candidate_sum = np.bincount(origin_index, weights=candidate, minlength=origin_count)
+    reference_sum = np.bincount(origin_index, weights=reference, minlength=origin_count)
+    base_mean = float(reference.mean())
+    point = 100.0 * (float(candidate.mean()) - base_mean) / max(base_mean, 1e-12)
+    rng = rng if rng is not None else np.random.default_rng(0)
+    picked = rng.integers(0, origin_count, (draws, origin_count))
+    drawn_count = counts[picked].sum(axis=1)
+    drawn_candidate = candidate_sum[picked].sum(axis=1) / drawn_count
+    drawn_reference = reference_sum[picked].sum(axis=1) / drawn_count
+    samples = (
+        100.0 * (drawn_candidate - drawn_reference) / np.maximum(drawn_reference, 1e-12)
+    )
+    return point, samples
+
+
 def compare(pred: np.ndarray, ref: np.ndarray, target: np.ndarray, scales: np.ndarray) -> dict:
     out = evaluate(pred, target, scales).to_dict()
     out.update(deviations(pred, ref, scales))

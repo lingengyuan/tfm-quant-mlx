@@ -15,7 +15,7 @@ The Chinese README ([README.md](README.md)) carries the full tables and per-sect
 - Plain `int4`: 191–251 MB, pinball +10–12%, quantile crossing 9–19%. Loss concentrates in the last layer (+7.9%) and the output head (+67.8% at 4-bit). A held-out ETTh2 run keeps the same order: layer 19 +2.33%, residual block +2.60%, 4-bit head +31.75%.
 - 4-bit that works: `mix_l18_19_8` 227 MB (5.82×), +0.80%; clipping 0.95 (`mix_l18_19_8c95`) reaches −0.22% on ETT and +0.61% on Jena, but is worse on traffic (+2.00%).
 - KV: `affine8` 1.78× (−0.01%), `affine4` 3.20× (+0.52%), `turbo3_mse` 3.10× (+2.71%). `qjl1` also reaches 1.78× but compresses only K, so it stays the worst at that ratio (+4.73%).
-- KV error also concentrates in the last block: keeping layer 19 at fp16 moves `affine4` from +0.52% to **−0.36%** (137 MB, 2.88×) and `turbo3_mse` from +2.71% to +0.69% (141 MB, 2.80×). A held-out ETTh2 run recovers only 0.45 pp instead of 0.95 pp, and the paired bootstrap intervals at 15,360 include zero (`affine4` [−0.33%, +1.65%], last-block fp16 [−1.12%, +0.57%]).
+- KV error also concentrates in the last block: keeping layer 19 at fp16 moves `affine4` from +0.52% to **−0.36%** (137 MB, 2.88×) and `turbo3_mse` from +2.71% to +0.69% (141 MB, 2.80×). A four-domain check on an independent window block (ETTh1, ETTh2, Jena, Electricity) keeps the same direction everywhere, with every paired 95% CI below zero, so the strategy is recommended as a default; the gain tracks `affine4`'s own error (0.74–3.03%). The full-grid intervals against fp32 still include zero (`affine4` [−0.33%, +1.65%], last-block fp16 [−1.12%, +0.57%]), so the recovery does not reach fp32.
 - Multivariate: fp32 pinball 0.1152 vs 0.1168 univariate; KV loss grows ~6× because variate attention is sensitive. Sequence `affine4` + variate `affine8` gives +1.15% at 2.29×.
 - Covariates: dropping them costs +4.98% pinball; int4 rises to +17.2%, while the seq/var KV mix stays at −0.91%.
 - Throughput does not improve: at 482 tokens the three precisions differ by ≤8%; end-to-end quantized runs are 0.4–5.6% faster, within the ~10% run-to-run spread. The gain from 4-bit is memory (2774 → 1717 MB).
@@ -95,6 +95,10 @@ done
 .venv/bin/tfmq run --config configs/attention_manual.yaml
 .venv/bin/tfmq run --config configs/attention_sdpa.yaml
 .venv/bin/tfmq attention-compare results/attention_manual.json results/attention_sdpa.json
+
+# paired comparison of two runs on the same windows
+.venv/bin/tfmq run --config configs/kv_lastlayer.yaml
+.venv/bin/tfmq compare results/kv_lastlayer.json --base affine4
 ```
 
 `predict` decodes each numeric column independently by default and batches equal-length columns (`--batch`, default 8). `--attention sdpa` selects the fused MLX kernel; it is not bit-identical to the manual path, especially with KV compression. `--multi` decodes columns together as variates; `--covariates` uses the last column as the target and the others as past-only covariates. In covariates mode, `--target` and `--time` name the target and timestamp columns, and `--future-covariates` lists known-future columns whose last `horizon` rows supply future values. Missing values stay in place and are masked, so gaps do not compress the time axis.
@@ -116,7 +120,7 @@ Configuration is YAML under `configs/`. Key fields: `datasets`, `max_channels`, 
 - Naive baseline: repeat the last context value at every step, with all nine quantiles at that value. Reports give fp32 relative to it.
 - Paired differences: reports resample forecast origins 2000 times, recompute both means each draw, and give a 95% CI of each configuration's pinball difference from fp32.
 - Missing values are passed as masks instead of dropping rows, so gaps do not compress the time axis.
-- Holdout: `--offset N` on `sensitivity` / `kv-sensitivity` moves the probe to an earlier contiguous block; with `window_mode: tail` on the evaluation config, the two blocks do not overlap.
+- Holdout: `--offset N` on `sensitivity` / `kv-sensitivity` moves the probe to an earlier contiguous block; an evaluation config uses `window_mode: tail` with `offset` for the same kind of block.
 - KV is the per-forward K/V working set: TimesFM 3.0 MLX is a single full-sequence pass with no cross-call cache.
 - Weights use MLX affine quantization through `nn.QuantizedLinear`; clipping 0.95 trims each input group before quantization.
 
@@ -137,6 +141,7 @@ src/tfmlab/
   convert.py          quantized export and direct loading
   attention.py        attention patch and KV installation
   attention_compare.py  manual vs SDPA result comparison
+  compare.py          paired comparison of two runs
   runtime.py          loading, inference, timing, memory
   metrics.py          point and quantile metrics
   runner.py           grid execution

@@ -7,6 +7,8 @@ from typing import Any
 
 import numpy as np
 
+from . import metrics
+
 
 def _fmt(value: Any, digits: int = 4) -> str:
     if value is None:
@@ -223,33 +225,12 @@ def _paired_table(
                 reference = _get(ref, "accuracy", dataset, str(context), "window_pinball")
                 if not current or not reference or len(current) != len(reference):
                     continue
-                candidate = np.asarray(current, dtype=float)
-                base_values = np.asarray(reference, dtype=float)
                 groups = _get(run, "accuracy", dataset, str(context), "window_group")
-                if not groups or len(groups) != len(candidate):
-                    groups = np.arange(len(candidate))
-                _, origin_index = np.unique(np.asarray(groups), return_inverse=True)
-                origin_count = int(origin_index.max()) + 1
-                counts = np.bincount(origin_index, minlength=origin_count).astype(float)
-                candidate_sum = np.bincount(
-                    origin_index, weights=candidate, minlength=origin_count
+                point, samples = metrics.paired_draws(
+                    current, reference, groups, draws, rng
                 )
-                base_sum = np.bincount(
-                    origin_index, weights=base_values, minlength=origin_count
-                )
-                base_mean = float(base_values.mean())
-                point_deltas.append(
-                    100.0 * (float(candidate.mean()) - base_mean) / max(base_mean, 1e-12)
-                )
-                picked = rng.integers(0, origin_count, (draws, origin_count))
-                drawn_count = counts[picked].sum(axis=1)
-                drawn_candidate = candidate_sum[picked].sum(axis=1) / drawn_count
-                drawn_base = base_sum[picked].sum(axis=1) / drawn_count
-                draw_deltas.append(
-                    100.0
-                    * (drawn_candidate - drawn_base)
-                    / np.maximum(drawn_base, 1e-12)
-                )
+                point_deltas.append(point)
+                draw_deltas.append(samples)
             if not point_deltas:
                 continue
             point = float(np.mean(point_deltas))

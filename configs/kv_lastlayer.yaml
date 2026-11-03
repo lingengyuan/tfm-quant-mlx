@@ -1,0 +1,21 @@
+# Last-block KV strategy across domains.
+# Three fixed runs on one window block: fp32, affine4, affine4 with layer 19
+# at fp16. Origins are the six most recent windows before the block reserved
+# for the full grid, so they are not the grid's origins.
+datasets: [ETTh1, ETTh2, jena, electricity]
+synthetic: false
+max_channels: 8
+contexts: [15360]
+windows: 6
+window_mode: tail
+offset: 6
+weights: [fp32]
+kv: [affine4, affine4_l19fp16]
+kv_contexts: [15360]
+kv_weights: [fp32]
+kv_scopes: [both]
+throughput_contexts: [15360]
+throughput_batches: [8]
+repeats: 2
+eval_batch: 16
+out: results/kv_lastlayer.json

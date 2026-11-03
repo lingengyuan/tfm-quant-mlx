@@ -15,7 +15,7 @@
 - 纯 `int4`：191–251 MB（5.3–6.9×），pinball +10–12%，逆序率 9–19%。损失集中在末层（单独 4-bit +7.9%）和输出头（4-bit +67.8%）。
 - 4-bit 体积下默认用 `mix_l18_19_8`（227 MB，5.82×，+0.80%）。裁剪 0.95 的 `mix_l18_19_8c95` 在 ETT/Jena 上到 −0.22% / +0.61%，但在 traffic 上更差（+2.00%），不是通用默认。
 - KV：`affine8` 1.78×（−0.01%）、`affine4` 3.20×（+0.52%）、`turbo3_mse` 3.10×（+2.71%）；`qjl1` 同为 1.78×，但只压 K、V 留 fp16，误差 +4.73%，是同压缩比下最差档。
-- KV 末层：第 19 层留 fp16，`affine4` 从 +0.52% 降到 **−0.36%**（137 MB，2.88×）；`turbo3_mse` 从 +2.71% 降到 +0.69%（141 MB，2.80×）。该结论在 ETTh2 留出集上未复现：保留第 19 层只回收 0.45 pp，最大回收来自第 01 层。15,360 的配对 bootstrap 中两者 95% CI 均跨 0（`affine4` [−0.33%, +1.65%]，第 19 层 fp16 [−1.12%, +0.57%]），不能确认改善。逐头误差分散，无单头主导。
+- KV 末层：第 19 层留 fp16，`affine4` 从 +0.52% 降到 **−0.36%**（137 MB，2.88×）；`turbo3_mse` 从 +2.71% 降到 +0.69%（141 MB，2.80×）。四域复核（ETTh1、ETTh2、Jena、Electricity，独立时点块）配对 95% CI 全部不含 0，判为通用推荐；回收幅度跟随 `affine4` 自身误差（0.74–3.03%）。全网格内对 fp32 的 CI 仍跨 0（`affine4` [−0.33%, +1.65%]，第 19 层 fp16 [−1.12%, +0.57%]），回收后不等价于 fp32。逐头误差分散，无单头主导。
 - 组合：`mix_l18_19_8 + affine4_l19fp16` 的 pinball +0.82%，权重 227 MB、KV 137 MB、峰值 1755 MB（fp32 2774 MB）。
 - 多变量（ETT 7 通道同批）：fp32 pinball 0.1152，优于单变量 0.1168；KV 压缩损失放大约 6 倍，主要来自 variate attention；seq 用 `affine4`、var 用 `affine8` 后为 +1.15%（2418 MB，2.29×）。
 - 协变量：去掉协变量 pinball +4.98%；带上协变量后 int8 +0.35%、int4 +17.2%、mix −0.87%；KV `affine4` +3.55%，seq/var 混合 −0.91%。
@@ -24,7 +24,7 @@
 - 量化不提速：模型层 GEMM 只有 482 token，三档差 ≤8%；端到端量化档 −0.4% 至 −5.6%，没有稳定收益。4-bit 的收益在显存（2774 → 1717 MB），不在吞吐。
 - 基准对齐：MLX fp32 与 PyTorch 后端在 4 个 ETT 的 56 条序列上平均归一化偏差 0.0013、最大 0.0081，pinball 差 −0.001%（ctx 15,360）。
 
-选择：权重用 `int8_g64` 或 `mix_l18_19_8`；单变量 KV 用 19 层 `affine4` + 末层 fp16（ETTh1 上验证，ETTh2 留出未复现，跨数据集需重新确认）；多变量 KV 用 seq `affine4` + var `affine8`。
+选择：权重用 `int8_g64` 或 `mix_l18_19_8`；单变量 KV 用 19 层 `affine4` + 末层 fp16（四域复核通过，限单变量、fp32 权重、ctx 15,360）；多变量 KV 用 seq `affine4` + var `affine8`。
 
 ## 结果
 
@@ -191,6 +191,25 @@ MLX 的 `nn.quantize` 把 Linear 换成 `nn.QuantizedLinear`，矩阵乘走 `mx.
 第 19 层在 ETTh2 上仍是单层误差第二（+0.354%），但保留它只回收 0.45 pp；最大回收来自第 01 层。第 19 层 fp16 的策略在 ETTh2 上没有复现，按层混合精度需要逐数据集验证。
 
 完整表：[`results/kv_sensitivity.md`](results/kv_sensitivity.md)、[`results/kv_sensitivity_turbo3.md`](results/kv_sensitivity_turbo3.md)、[`results/kv_sensitivity_holdout.md`](results/kv_sensitivity_holdout.md)。
+
+### KV 末层策略四域复核（上下文 15,360）
+
+固定三档：fp32、`affine4`、`affine4` + 第 19 层 fp16。窗口取各序列最近窗口之前的一块（`window_mode: tail`，`offset: 6`，每域 6 个时点），时点不在 full 网格的 6 个时点内；15,360 的上下文使输入区间仍与网格重叠，独立性只体现在预测时点。ETTh2、Jena、Electricity 未参与末层策略的选择。
+
+| 数据集 | fp32 | affine4 | 第 19 层 fp16 | 配对差（相对 affine4） | 95% CI |
+|---|---|---|---|---|---|
+| ETTh1 | 0.1454 | 0.1484 | 0.1471 | −0.84% | [−1.16%, −0.55%] |
+| ETTh2 | 0.0704 | 0.0713 | 0.0702 | −1.54% | [−1.91%, −1.07%] |
+| Jena | 0.0464 | 0.0483 | 0.0469 | −3.03% | [−5.81%, −1.59%] |
+| Electricity | 0.1979 | 0.1989 | 0.1974 | −0.74% | [−1.69%, −0.34%] |
+
+- 四个域的配对 CI 上界都低于 0，按预设规则判为通用推荐。
+- 回收幅度跟随 `affine4` 自身误差：Jena 误差最大（+4.18%），回收最多（3.03%）；Electricity 误差最小（+0.47%），回收 0.74%。
+- ETTh2 的 0.0702 略低于 fp32 的 0.0704，属于噪声，不能解读为优于 fp32。
+- 早前 ETTh2 留出（3 个 spread 窗口）回收 0.45 pp（+0.98% → +0.53%），本时点块回收 1.56 pp（+1.32% → −0.24%）。方向一致，幅度随时点块变化，评估应报区间而不是单点。
+- 适用范围：单变量、fp32 权重、`affine4`、ctx 15,360。多变量与权重混合精度未在本轮复核。
+
+完整表：[`results/kv_lastlayer_compare.md`](results/kv_lastlayer_compare.md)；原始结果 [`results/kv_lastlayer.json`](results/kv_lastlayer.json)。
 
 ### 权重 + KV 组合（上下文 15,360）
 
@@ -411,6 +430,9 @@ done
 .venv/bin/tfmq run --config configs/attention_sdpa.yaml
 .venv/bin/tfmq attention-compare results/attention_manual.json results/attention_sdpa.json \
   -o results/attention.md
+.venv/bin/tfmq run --config configs/kv_lastlayer.yaml
+.venv/bin/tfmq compare results/kv_lastlayer.json --base affine4 \
+  -o results/kv_lastlayer_compare.md
 .venv/bin/tfmq profile
 .venv/bin/tfmq parity  # 需要 torch：uv pip install -e ".[parity]"
 .venv/bin/tfmq covariates
@@ -437,7 +459,7 @@ done
 - `朴素基线`：每个窗口重复最后一个上下文值，九个分位取同一值；报告给出 fp32 相对该基线的差。
 - `配对差异`：报告按预测时点重采样 2000 次，每次重算候选与 fp32 的均值，给出各配置相对 fp32 的 pinball 差 95% CI。
 - `缺失值`：目标与协变量以掩码传给模型，不跨列删行，时间间隔保持不变。
-- `留出`：`sensitivity` / `kv-sensitivity` 的 `--offset N` 使用最近窗口中更早的连续区块；评测配置设 `window_mode: tail` 时，两侧窗口不重叠。
+- `留出`：`sensitivity` / `kv-sensitivity` 的 `--offset N` 使用最近窗口中更早的连续区块；评测配置用 `window_mode: tail` 加 `offset` 取同一类区块。
 - `cov err` 为 9 个十分位覆盖率与名义值之差的平均；`cross %` 为排序前的相邻十分位逆序比例。
 - `KV MB` 按张量形状和比特数计算，`reduction` 相对 fp16 K/V；`peak MB` 为 MLX 峰值显存，含常驻权重。
 
@@ -479,6 +501,7 @@ src/tfmlab/
   convert.py         量化模型导出与直接加载
   attention.py       注意力补丁
   attention_compare.py  manual 与 SDPA 结果对比
+  compare.py          两次运行的配对对比
   runtime.py         加载、推理、计时、显存
   metrics.py         点预测与分位数指标
   runner.py          网格执行

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.9 — 2026-11-03
+
+- 新增 `tfmq compare`：两次运行按预测时点配对，输出绝对 pinball、相对变化与 95% CI。
+- 评测配置新增 `offset`，与 `window_mode: tail` 组合取留出窗口块。
+- 四域复核（ETTh1/ETTh2/Jena/Electricity，独立时点块）：第 19 层 fp16 相对 `affine4` 的配对 CI 全部低于 0，判为通用推荐；回收 0.74–3.03%，随 `affine4` 自身误差增大。
+- `metrics.paired_draws` 抽出配对抽样，报告与 `compare` 共用。
+
 ## 0.1.8 — 2026-11-03
 
 - 多变量评测支持 `window_mode: tail`，与单变量共用留出区块。
