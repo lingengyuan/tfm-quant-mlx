@@ -82,7 +82,7 @@ MLX fp32 基线与原实现一致，其余表格的 `Δ` 有可信参照。完�
 
 ### 为什么量化不提速（上下文 15,360）
 
-MLX 的 `nn.quantize` 把 Linear 换成 `nn.QuantizedLinear`，矩阵乘走 `mx.quantized_matmul`，不是缺 kernel。问题在 shape：
+MLX 的 `nn.quantize` 把 Linear 换成 `nn.QuantizedLinear`，矩阵乘走 `mx.quantized_matmul`，不是缺 kernel。问题在 shape：每序列 482 token，batch 8 的实际 GEMM 是 3,856 行；15,424 行是长上下文压力档。
 
 | tokens | fp32 ms | int8 ms | int4 ms |
 |---|---|---|---|
@@ -105,7 +105,7 @@ MLX 的 `nn.quantize` 把 Linear 换成 `nn.QuantizedLinear`，矩阵乘走 `mx.
 - 量化档与 fp32 的端到端差异 ≤7%；融合注意力档快 18%，但同一配置重复运行的波动可达 10%，不足以支撑稳定加速的结论。受控 A/B 下融合注意力为 3.4%（109.6 → 105.9 ms，batch 1）。
 - KV `affine4` 与 fp32 持平（705.2 vs 709.3 ms）；加融合注意力后 587.3 ms。
 - KV 提速需要“解压 + 注意力”融合的自定义 kernel，本仓库没有实现。
-- `tfmq profile` 复现上表，输出 [`results/profile.json`](results/profile.json)。
+- `tfmq profile` 复现上表，输出 [`results/profile.json`](results/profile.json)。该文件同时记录每档原始计时、git 提交与脏状态、checkpoint 哈希、合成输入哈希和环境信息。
 
 ### SDPA 后端（ETTh1，上下文 2,048 / 15,360）
 
