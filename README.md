@@ -9,6 +9,10 @@
 - 模型：`google/timesfm-3.0-pytorch`，20 层、1280 维、16 头、上下文上限 15,360、horizon 64。
 - 环境：Apple M5 / 32 GB / macOS 27.0.1，MLX 0.32.4，timesfm 3.0.2，Python 3.12.14。
 
+![峰值显存与预测误差](results/tradeoff.svg)
+
+横轴为峰值显存，纵轴为相对 fp32 的 pinball 变化，上下文 15,360。蓝点为文中重点对比的四档；灰点为其他权重与 KV 配置。数据来自 `results/` 的 JSON，图由 `scripts/tradeoff.py` 生成。
+
 ## 结论
 
 - `fp16` / `bf16`：权重 1323 → 661 MB（2.00×），pinball 变化 ≤0.05%；`int8_g64` 375 MB（3.53×），+0.11%。
@@ -508,6 +512,7 @@ src/tfmlab/
   report.py          Markdown 报告
 configs/             full / quick / mixed / kv_mixed / combo / multi 等网格
 results/             JSON、报告、敏感度表
+scripts/             checkpoint 下载与图 1 的生成脚本
 tests/
 ```
 

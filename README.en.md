@@ -7,6 +7,10 @@ Weight precision, low-bit quantization, and long-context K/V working-set compres
 - Model: `google/timesfm-3.0-pytorch`, 20 layers, 1280 dims, 16 heads, context up to 15,360, horizon 64.
 - Environment: Apple M5 / 32 GB / macOS 27.0.1, MLX 0.32.4, timesfm 3.0.2, Python 3.12.14.
 
+![Peak memory and forecast error](results/tradeoff.svg)
+
+Peak memory against the pinball change from fp32 at context 15,360. Blue points are the four configurations the findings call out; grey points are other weight and KV setups. The figure is rendered from the JSON under `results/` by `scripts/tradeoff.py`.
+
 The Chinese README ([README.md](README.md)) carries the full tables and per-section detail; this page is the English entry point.
 
 ## Findings
@@ -148,6 +152,7 @@ src/tfmlab/
   report.py           Markdown reports
 configs/              grid YAML files
 results/              JSON and Markdown results
+scripts/              checkpoint download and the trade-off figure
 tests/
 ```
 
